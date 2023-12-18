@@ -1,0 +1,29 @@
+{
+    "Shenzhen": {
+        "tag": "china", 
+        "sources": {
+            "raw": {
+                "csv": "Shenzhen_china_table_from_raw.csv", 
+                "pkl": "splits.pkl"
+            }
+        }
+    },
+    "Manaus": {
+    	"tag": "c_manaus", 
+	"sources": {
+	    "raw": {
+	    	"csv": "Manaus_c_manaus_table_from_raw.csv", 
+		"pkl": "splits.pkl"
+	    }
+	}
+    },
+    "SantaCasa": {
+        "tag": "imageamento_anonimizado_valid", 
+        "sources": {
+            "raw": {
+                "csv": "SantaCasa_imageamento_anonimizado_valid_table_from_raw.csv", 
+                "pkl": "splits.pkl"
+            }
+        }
+    }
+}

@@ -1,0 +1,33 @@
+{
+    "baseline": {
+        "metadata_real": "/home/philipp.gaspar/public/shenzhen_real_metadata.csv",
+        "batch_size": 32, 
+        "epochs": 100, 
+        "image_shape": [256, 256], 
+        "learning_rate": 0.001
+    },
+    "synthetic": {
+        "metadata_wgan": "/home/philipp.gaspar/public/shenzhen_wgan_metadata.csv",
+        "metadata_pix2pix": "/home/philipp.gaspar/public/shenzhen_pix2pix_metadata.csv",
+        "batch_size": 32, 
+        "epochs": 100, 
+        "image_shape": [256, 256], 
+        "learning_rate": 0.001
+    },
+    "interleaved": {
+        "metadata_wgan": "/home/philipp.gaspar/public/shenzhen_wgan_metadata.csv",
+        "metadata_pix2pix": "/home/philipp.gaspar/public/shenzhen_pix2pix_metadata.csv",
+        "batch_size": 32, 
+        "epochs": 100, 
+        "image_shape": [256, 256], 
+        "learning_rate": 0.001
+    }, 
+    "fine_tuning": {
+        "metadata_wgan": "/home/philipp.gaspar/public/shenzhen_wgan_metadata.csv",
+        "metadata_pix2pix": "/home/philipp.gaspar/public/shenzhen_pix2pix_metadata.csv",
+        "batch_size": 32, 
+        "epochs": 100, 
+        "image_shape": [256, 256], 
+        "learning_rate": 0.001
+    }
+}
