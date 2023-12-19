@@ -3,9 +3,9 @@ import json, os
 
 
 # create jobs
-def create_jobs(job_path):
-  if not os.path.exists(job_path):
-    os.makedirs(job_path, exist_ok=True)
+def create_jobs(output_path):
+  if not os.path.exists(output_path):
+    os.makedirs(output_path, exist_ok=True)
     for test in range(10):
         for sort in range(9):
             d = {'sort':sort,'test':test}
@@ -46,9 +46,9 @@ job_path = os.getcwd()+'/jobs'
 
 
 create_jobs(job_path)
-create_task( 'task.philipp.gaspar.convnets.baseline'            , 'baseline'            , 'baseline_info.json'            , dry_run=True )
-create_task( 'task.philipp.gaspar.convnets.altogether'          , 'altogether'          , 'altogether_info.json'          , dry_run=True )
-create_task( 'task.philipp.gaspar.convnets.interleaved'         , 'interleaved'         , 'interleaved_info.json'         , dry_run=True )
-create_task( 'task.philipp.gaspar.convnets.baseline_fine_tuning', 'baseline_fine_tuning', 'baseline_fine_tuning_info.json', dry_run=True )
+#create_task( 'task.philipp.gaspar.convnets.baseline'            , 'baseline'            , 'baseline_info.json'            , dry_run=True )
+#create_task( 'task.philipp.gaspar.convnets.altogether'          , 'altogether'          , 'altogether_info.json'          , dry_run=True )
+#create_task( 'task.philipp.gaspar.convnets.interleaved'         , 'interleaved'         , 'interleaved_info.json'         , dry_run=True )
+#create_task( 'task.philipp.gaspar.convnets.baseline_fine_tuning', 'baseline_fine_tuning', 'baseline_fine_tuning_info.json', dry_run=True )
             
 

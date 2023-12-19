@@ -6,7 +6,7 @@ import json
 import typing as T
 from dataclasses import dataclass
 from pathlib import Path
-
+from pprint import pprint
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -247,11 +247,12 @@ def train_neural_net(df_train, df_valid, df_test, params):
     summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
     summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
     # operation (train plus val)
-    df_operation = pd.concat([df_train, df_val])
+    df_operation = pd.concat([df_train, df_valid])
     ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
     summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
     history.history['summary'] = summary
 
+    pprint(summary)
 
     train_state = prepare_model(
         model=model,
