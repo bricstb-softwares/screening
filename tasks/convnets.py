@@ -106,7 +106,9 @@ class TrainBaseline(TrainCNN):
             logging.info(f"Fold #{i} / Validation #{j}")
             train_real = split_dataframe(metadata, i, j, "train_real")
             valid_real = split_dataframe(metadata, i, j, "valid_real")
-            train_state = train_neural_net(train_real, valid_real, task_params)
+            test_real  = split_dataframe(metadata, i, j, "test_real" )
+
+            train_state = train_neural_net(train_real, valid_real, test_real, task_params)
             output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
             save_train_state(output_path, train_state)
         end = default_timer()
@@ -144,13 +146,13 @@ class TrainSynthetic(TrainCNN):
             cross_val_path = self.requires()[i].output().path
             metadata_list.append(pd.read_parquet(cross_val_path))
 
-        metadata = pd.concat(metadata_list)
-        metadata = metadata.sample(frac=1, random_state=42)
-        job      = task_params.get('job', None)    
+        metadata   = pd.concat(metadata_list)
+        metadata   = metadata.sample(frac=1, random_state=42)
+        job_params = self.get_job_params()   
 
         # training loop
-        folds = list(range(10)) if not job else [job['test']]
-        inner_folds = list(range(9)) if not job else [job['sort']]
+        folds = list(range(10)) if not job_params else [job_params['test']]
+        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
         experiment_path = Path(self.get_output_path())
 
         start = default_timer()
@@ -158,16 +160,31 @@ class TrainSynthetic(TrainCNN):
             logging.info(f"Fold #{i} / Validation #{j}")
             train_fake = split_dataframe(metadata, i, j, "train_fake")
             valid_real = split_dataframe(metadata, i, j, "valid_real")
-            train_state = train_neural_net(train_fake, valid_real, task_params)
-            output_path = experiment_path / f"cnn_fold{i}/sort{j}/"
+            test_real  = split_dataframe(metadata, i, j, "test_real" )
+
+            train_state = train_neural_net(train_fake, valid_real, test_real, task_params)
+            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
             save_train_state(output_path, train_state)
         end = default_timer()
 
         # output results
         task_params["experiment_id"] = experiment_path.name
         task_params["training_time"] = timedelta(seconds=(end - start))
-        with open(self.output().path, "wb") as file:
-            pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+        if job_params: # as job
+            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            save_job_state( self.output().path, metadata,
+                            train_state, 
+                            job_params      = job_params, 
+                            task_params     = task_params,
+                            dataset_info    = self.dataset_info,
+                            hash_experiment = self.get_hash() )
+
+        else: # as single task
+            with open(self.output().path, "wb") as file:
+                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+
 
         logging.info("")
         logging.info(f" - Output: {self.get_output_path()}")
@@ -187,11 +204,11 @@ class TrainInterleaved(TrainCNN):
 
         metadata = pd.concat(metadata_list)
         metadata = metadata.sample(frac=1, random_state=42)
-        job      = task_params.get('job', None)    
+        job_params = self.get_job_params()    
 
         # training loop
-        folds = list(range(10)) if not job else [job['test']]
-        inner_folds = list(range(9)) if not job else [job['sort']]
+        folds = list(range(10)) if not job_params else [job_params['test']]
+        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
         experiment_path = Path(self.get_output_path())
 
         start = default_timer()
@@ -200,19 +217,33 @@ class TrainInterleaved(TrainCNN):
             train_fake = split_dataframe(metadata, i, j, "train_fake")
             train_real = split_dataframe(metadata, i, j, "train_real")
             valid_real = split_dataframe(metadata, i, j, "valid_real")
+            test_real  = split_dataframe(metadata, i, j, "test_real" )
 
             train_state = train_interleaved(
-                train_real, train_fake, valid_real, task_params
+                train_real, train_fake, valid_real, test_real, task_params
             )
-            output_path = experiment_path / f"cnn_fold{i}/sort{j}/"
+            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
             save_train_state(output_path, train_state)
+
         end = default_timer()
 
         task_params["experiment_id"] = experiment_path.name
         task_params["training_time"] = timedelta(seconds=(end - start))
-        with open(self.output().path, "wb") as file:
-            pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        if job_params: # as job
+            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            save_job_state( self.output().path, metadata,
+                            train_state, 
+                            job_params      = job_params, 
+                            task_params     = task_params,
+                            dataset_info    = self.dataset_info,
+                            hash_experiment = self.get_hash() )
 
+        else: # as single task
+            with open(self.output().path, "wb") as file:
+                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        
         logging.info("")
         logging.info(f" - Output: {self.get_output_path()}")
         logging.info("")
@@ -231,11 +262,11 @@ class TrainAltogether(TrainCNN):
 
         metadata = pd.concat(metadata_list)
         metadata = metadata.sample(frac=1, random_state=42)
-        job      = task_params.get('job', None)    
+        job_params = self.get_job_params()   
 
         # training loop
-        folds = list(range(10)) if not job else [job['test']]
-        inner_folds = list(range(9)) if not job else [job['sort']]
+        folds = list(range(10)) if not job_params else [job_params['test']]
+        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
         experiment_path = Path(self.get_output_path())
 
         start = default_timer()
@@ -244,6 +275,7 @@ class TrainAltogether(TrainCNN):
             train_real = split_dataframe(metadata, i, j, "train_real")
             train_fake = split_dataframe(metadata, i, j, "train_fake")
             valid_real = split_dataframe(metadata, i, j, "valid_real")
+            test_real  = split_dataframe(metadata, i, j, "test_real" )
 
             real_weights = (1 / len(train_real)) * np.ones(len(train_real))
             fake_weights = (1 / len(train_fake)) * np.ones(len(train_fake))
@@ -251,16 +283,32 @@ class TrainAltogether(TrainCNN):
             weights = weights / sum(weights)
 
             train_state = train_altogether(
-                train_real, train_fake, valid_real, weights, task_params
+                train_real, train_fake, valid_real, test_real, weights, task_params
             )
-            output_path = experiment_path / f"cnn_fold{i}/sort{j}/"
+            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
+
             save_train_state(output_path, train_state)
+
+
+
+
         end = default_timer()
 
         task_params["experiment_id"] = experiment_path.name
         task_params["training_time"] = timedelta(seconds=(end - start))
-        with open(self.output().path, "wb") as file:
-            pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        if job_params: # as job
+            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            save_job_state( self.output().path, metadata,
+                            train_state, 
+                            job_params      = job_params, 
+                            task_params     = task_params,
+                            dataset_info    = self.dataset_info,
+                            hash_experiment = self.get_hash() )
+
+        else: # as single task
+            with open(self.output().path, "wb") as file:
+                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 
         logging.info("")
         logging.info(f" - Output: {self.get_output_path()}")
@@ -286,6 +334,7 @@ class TrainBaselineFineTuning(TrainCNN):
             image_width=self.image_width,
             image_height=self.image_height,
             grayscale=self.grayscale,
+            job_params=self.job_params,
         )
 
         required_tasks = [baseline_train]
@@ -319,11 +368,11 @@ class TrainBaselineFineTuning(TrainCNN):
 
         metadata = pd.concat(metadata_list)
         metadata = metadata.sample(frac=1, random_state=42)
-        job      = task_params.get('job', None)    
+        job_params = self.get_job_params()  
 
         # training loop
-        folds = list(range(10)) if not job else [job['test']]
-        inner_folds = list(range(9)) if not job else [job['sort']]
+        folds = list(range(10)) if not job_params else [job_params['test']]
+        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
         experiment_path = Path(self.get_output_path())
 
         start = default_timer()
@@ -332,18 +381,35 @@ class TrainBaselineFineTuning(TrainCNN):
             model_path = baseline_path / f"cnn_fold{i}/sort{j}/"
             train_fake = split_dataframe(metadata, i, j, "train_fake")
             valid_real = split_dataframe(metadata, i, j, "valid_real")
+            test_real  = split_dataframe(metadata, i, j, "test_real" )
+
+        
             train_state = train_fine_tuning(
-                train_fake, valid_real, task_params, model_path
+                train_fake, valid_real, test_real, task_params, model_path
             )
-            output_path = experiment_path / f"cnn_fold{i}/sort{j}/"
+            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
+
             save_train_state(output_path, train_state)
         end = default_timer()
 
         # output results
         task_params["experiment_id"] = experiment_path.name
         task_params["training_time"] = timedelta(seconds=(end - start))
-        with open(self.output().path, "wb") as file:
-            pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+    
+        if job_params: # as job
+            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            save_job_state( self.output().path, metadata,
+                            train_state, 
+                            job_params      = job_params, 
+                            task_params     = task_params,
+                            dataset_info    = self.dataset_info,
+                            hash_experiment = self.get_hash() )
+
+        else: # as single task
+            with open(self.output().path, "wb") as file:
+                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        
 
         logging.info("")
         logging.info(f" - Output: {self.get_output_path()}")
@@ -362,6 +428,7 @@ class TrainFineTuning(TrainCNN):
             image_width=self.image_width,
             image_height=self.image_height,
             grayscale=self.grayscale,
+            job_params=self.job_params,
         )
 
         return [synthetic_train]
@@ -377,6 +444,7 @@ class TrainFineTuning(TrainCNN):
             image_width=self.image_width,
             image_height=self.image_height,
             grayscale=self.grayscale,
+            job_params=self.job_params,
         )
         synthetic_path = Path(synthetic_task.get_output_path())
 
@@ -386,11 +454,11 @@ class TrainFineTuning(TrainCNN):
 
         metadata = pd.concat(metadata_list)
         metadata = metadata.sample(frac=1, random_state=42)
-        job      = task_params.get('job', None)    
+        job_params      = self.get_job_params() 
 
         # training loop
-        folds = list(range(10)) if not job else [job['test']]
-        inner_folds = list(range(9)) if not job else [job['sort']]
+        folds = list(range(10)) if not job_params else [job_params['test']]
+        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
         experiment_path = Path(self.get_output_path())
 
         start = default_timer()
@@ -399,18 +467,33 @@ class TrainFineTuning(TrainCNN):
             model_path = synthetic_path / f"cnn_fold{i}/sort{j}/"
             train_real = split_dataframe(metadata, i, j, "train_real")
             valid_real = split_dataframe(metadata, i, j, "valid_real")
+            test_real  = split_dataframe(metadata, i, j, "test_real" )
+
             train_state = train_fine_tuning(
-                train_real, valid_real, task_params, model_path
+                train_real, valid_real, test_real, task_params, model_path
             )
-            output_path = experiment_path / f"cnn_fold{i}/sort{j}/"
+            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
             save_train_state(output_path, train_state)
         end = default_timer()
 
         # output results
         task_params["experiment_id"] = experiment_path.name
         task_params["training_time"] = timedelta(seconds=(end - start))
-        with open(self.output().path, "wb") as file:
-            pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        if job_params: # as job
+            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            save_job_state( self.output().path, metadata,
+                            train_state, 
+                            job_params      = job_params, 
+                            task_params     = task_params,
+                            dataset_info    = self.dataset_info,
+                            hash_experiment = self.get_hash() )
+
+        else: # as single task
+            with open(self.output().path, "wb") as file:
+                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        
 
         logging.info("")
         logging.info(f" - Output: {self.get_output_path()}")

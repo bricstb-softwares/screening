@@ -46,6 +46,13 @@ def split_dataframe(df, fold, inner_fold, type_set):
             & (df["fold"] == fold)
             & (df["inner_fold"] == inner_fold)
         ]
+    elif type_set == "test_real":
+        res = df[
+            (df["type"] == "real")
+            & (df["set"] == "test")
+            & (df["fold"] == fold)
+            & (df["inner_fold"] == inner_fold)
+        ]
     else:
         raise NotImplementedError(f"Type set '{type_set}' not implemented.")
 
@@ -201,13 +208,14 @@ def prepare_model(model, history, params):
 
 
 #@MEMORY.cache
-def train_neural_net(df_train, df_valid, params):
+def train_neural_net(df_train, df_valid, df_test, params):
     # type: (pd.DataFrame, pd.DataFrame, dict[str, T.Any]) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
 
     ds_train = build_dataset(df_train, params["image_shape"], params["batch_size"])
     ds_valid = build_dataset(df_valid, params["image_shape"], params["batch_size"])
+    ds_test  = build_dataset(df_test , params["image_shape"], params["batch_size"])
 
     tf.keras.backend.clear_session()
     optimizer = adam_v2.Adam(params["learning_rate"])
@@ -234,6 +242,17 @@ def train_neural_net(df_train, df_valid, params):
     )
     history.history["best_epoch"] = early_stop.best_epoch
 
+    summary = {}
+    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
+    summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
+    summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
+    # operation (train plus val)
+    df_operation = pd.concat([df_train, df_val])
+    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
+    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
+    history.history['summary'] = summary
+
+
     train_state = prepare_model(
         model=model,
         history=history.history,
@@ -244,7 +263,7 @@ def train_neural_net(df_train, df_valid, params):
 
 
 #@MEMORY.cache
-def train_interleaved(df_train_real, df_train_fake, df_valid_real, params):
+def train_interleaved(df_train_real, df_train_fake, df_valid_real, df_test_real, params):
     # type: (pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, T.Any]) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
@@ -279,6 +298,20 @@ def train_interleaved(df_train_real, df_train_fake, df_valid_real, params):
     )
     history.history["best_epoch"] = early_stop.best_epoch
 
+    summary = {}
+    # train
+    df_train = pd.concat([df_train_real, df_train_fake])
+    ds_train = build_dataset(df_train, params["image_shape"], batch_size=128)
+    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
+    # valid and test
+    summary.update( report.calculate_metrics(ds_valid_real, df_valid_real, model , label='_val' ) )
+    summary.update( report.calculate_metrics(ds_test_real , df_test_real , model , label='_test' ) )
+    # operation (train plus val)
+    df_operation = pd.concat([df_train, df_val_real])
+    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
+    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
+    history.history['summary'] = summary
+
     train_state = prepare_model(
         model=model,
         history=history.history,
@@ -289,7 +322,7 @@ def train_interleaved(df_train_real, df_train_fake, df_valid_real, params):
 
 
 #@MEMORY.cache
-def train_altogether(df_train_real, df_train_fake, df_valid_real, weights, params):
+def train_altogether(df_train_real, df_train_fake, df_valid_real, df_test_real, weights, params):
     # type: (pd.DataFrame, pd.DataFrame, pd.DataFrame, list, dict[str, T.Any]) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
@@ -327,6 +360,21 @@ def train_altogether(df_train_real, df_train_fake, df_valid_real, weights, param
 
     history.history["best_epoch"] = early_stop.best_epoch
 
+    summary = {}
+    # train
+    df_train = pd.concat([df_train_real, df_train_fake])
+    ds_train = build_dataset(df_train, params["image_shape"], batch_size=128)
+    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
+    # valid and test
+    summary.update( report.calculate_metrics(ds_valid_real, df_valid_real, model , label='_val' ) )
+    summary.update( report.calculate_metrics(ds_test_real , df_test_real , model , label='_test' ) )
+    # operation (train plus val)
+    df_operation = pd.concat([df_train, df_val_real])
+    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
+    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
+    history.history['summary'] = summary
+
+
     train_state = prepare_model(
         model=model,
         history=history.history,
@@ -337,7 +385,7 @@ def train_altogether(df_train_real, df_train_fake, df_valid_real, weights, param
 
 
 #@MEMORY.cache
-def train_fine_tuning(df_train, df_valid, params, synthetic_path):
+def train_fine_tuning(df_train, df_valid, df_test, params, synthetic_path):
     # type: (pd.DataFrame, pd.DataFrame, dict[str, T.Any], str) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
@@ -368,6 +416,17 @@ def train_fine_tuning(df_train, df_valid, params, synthetic_path):
         verbose=2,
     )
     history.history["best_epoch"] = early_stop.best_epoch
+
+    summary = {}
+    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
+    summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
+    summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
+    # operation (train plus val)
+    df_operation = pd.concat([df_train, df_val])
+    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
+    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
+    history.history['summary'] = summary
+
 
     train_state = prepare_model(
         model=model,
@@ -424,10 +483,6 @@ def save_job_state( path, dataset , train_state, job_params, task_params, datase
     test = job_params['test']
     sort = job_params['sort']
 
-    metrics = get_training_metrics( build_model( train_state.model_sequence, train_state.model_weights), 
-                                        dataset, task_params, test, sort )
-    train_state.history['summary'] = metrics
-
     with open(path, 'wb') as file:
 
         d = {
@@ -442,49 +497,6 @@ def save_job_state( path, dataset , train_state, job_params, task_params, datase
         }
 
         pickle.dump(d, file, pickle.HIGHEST_PROTOCOL)
-
-
-def get_training_metrics( model , dataset, params,  test, sort):
-
-    # validation performance
-    data_train = dataset[
-                      (dataset["fold"] == test)
-                    & (dataset["inner_fold"] == sort)
-                    & (dataset["set"] == "train")
-                ]
-
-    data_val = dataset[
-                      (dataset["fold"] == test)
-                    & (dataset["inner_fold"] == sort)
-                    & (dataset["set"] == "val")
-                ]
-
-    data_test = dataset[
-                      (dataset["fold"] == test)
-                    & (dataset["inner_fold"] == sort)
-                    & (dataset["set"] == "val")
-                ]             
-
-    # train
-    ds = build_dataset(data_train, params["image_shape"], batch_size=128)
-    metrics = report.calculate_metrics(ds, data_train, model)
-
-    # validation
-    ds = build_dataset(data_val, params["image_shape"], batch_size=128)
-    metrics.update( report.calculate_metrics(ds, data_val, model , label='_val' ) )
-
-    # test
-    ds = build_dataset(data_test, params["image_shape"], batch_size=128)
-    metrics.update( report.calculate_metrics(ds, data_test, model , label='_test' ) )
-
-    # operation (train plus val)
-    data_operation = pd.concat([data_train, data_val])
-    ds = build_dataset(data_operation, params["image_shape"], batch_size=128)
-    metrics.update( report.calculate_metrics(ds, data_operation, model , label='_op' ) )
- 
-    return metrics
-
-
 
 
 
