@@ -6,7 +6,7 @@ from datetime import datetime
 
 def set_logger(log_path, mode="w"):
     log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
-    log_level = 'INFO'#os.environ['LOGURU_LEVEL']
+    log_level = os.environ.get('LOGURU_LEVEL', "INFO")
     logger.add(log_path, level=log_level, format=log_format, colorize=False, backtrace=True, diagnose=True)
 
 
