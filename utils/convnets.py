@@ -20,7 +20,7 @@ from tensorflow.keras.models import model_from_json
 from utils import report
 from pprint import pprint
 
-MEMORY = Memory("/tmp/LTBI", verbose=0)
+#MEMORY = Memory("/tmp/LTBI", verbose=0)
 
 
 def split_dataframe(df, fold, inner_fold, type_set):
@@ -208,14 +208,14 @@ def prepare_model(model, history, params):
 
 
 #@MEMORY.cache
-def train_neural_net(df_train, df_valid, df_test, params):
+def train_neural_net(df_train, df_valid, params):
+
     # type: (pd.DataFrame, pd.DataFrame, dict[str, T.Any]) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
 
     ds_train = build_dataset(df_train, params["image_shape"], params["batch_size"])
     ds_valid = build_dataset(df_valid, params["image_shape"], params["batch_size"])
-    ds_test  = build_dataset(df_test , params["image_shape"], params["batch_size"])
 
     tf.keras.backend.clear_session()
     optimizer = adam_v2.Adam(params["learning_rate"])
@@ -242,18 +242,6 @@ def train_neural_net(df_train, df_valid, df_test, params):
     )
     history.history["best_epoch"] = early_stop.best_epoch
 
-    summary = {}
-    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
-    summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
-    summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
-    # operation (train plus val)
-    df_operation = pd.concat([df_train, df_valid])
-    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
-    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
-    history.history['summary'] = summary
-
-    pprint(summary)
-
     train_state = prepare_model(
         model=model,
         history=history.history,
@@ -264,7 +252,7 @@ def train_neural_net(df_train, df_valid, df_test, params):
 
 
 #@MEMORY.cache
-def train_interleaved(df_train_real, df_train_fake, df_valid_real, df_test_real, params):
+def train_interleaved(df_train_real, df_train_fake, df_valid_real, params):
     # type: (pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, T.Any]) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
@@ -299,20 +287,6 @@ def train_interleaved(df_train_real, df_train_fake, df_valid_real, df_test_real,
     )
     history.history["best_epoch"] = early_stop.best_epoch
 
-    summary = {}
-    # train
-    df_train = pd.concat([df_train_real, df_train_fake])
-    ds_train = build_dataset(df_train, params["image_shape"], batch_size=128)
-    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
-    # valid and test
-    summary.update( report.calculate_metrics(ds_valid_real, df_valid_real, model , label='_val' ) )
-    summary.update( report.calculate_metrics(ds_test_real , df_test_real , model , label='_test' ) )
-    # operation (train plus val)
-    df_operation = pd.concat([df_train, df_val_real])
-    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
-    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
-    history.history['summary'] = summary
-
     train_state = prepare_model(
         model=model,
         history=history.history,
@@ -323,7 +297,7 @@ def train_interleaved(df_train_real, df_train_fake, df_valid_real, df_test_real,
 
 
 #@MEMORY.cache
-def train_altogether(df_train_real, df_train_fake, df_valid_real, df_test_real, weights, params):
+def train_altogether(df_train_real, df_train_fake, df_valid_real, weights, params):
     # type: (pd.DataFrame, pd.DataFrame, pd.DataFrame, list, dict[str, T.Any]) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
@@ -361,21 +335,6 @@ def train_altogether(df_train_real, df_train_fake, df_valid_real, df_test_real, 
 
     history.history["best_epoch"] = early_stop.best_epoch
 
-    summary = {}
-    # train
-    df_train = pd.concat([df_train_real, df_train_fake])
-    ds_train = build_dataset(df_train, params["image_shape"], batch_size=128)
-    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
-    # valid and test
-    summary.update( report.calculate_metrics(ds_valid_real, df_valid_real, model , label='_val' ) )
-    summary.update( report.calculate_metrics(ds_test_real , df_test_real , model , label='_test' ) )
-    # operation (train plus val)
-    df_operation = pd.concat([df_train, df_val_real])
-    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
-    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
-    history.history['summary'] = summary
-
-
     train_state = prepare_model(
         model=model,
         history=history.history,
@@ -386,7 +345,7 @@ def train_altogether(df_train_real, df_train_fake, df_valid_real, df_test_real, 
 
 
 #@MEMORY.cache
-def train_fine_tuning(df_train, df_valid, df_test, params, synthetic_path):
+def train_fine_tuning(df_train, df_valid, params, synthetic_path):
     # type: (pd.DataFrame, pd.DataFrame, dict[str, T.Any], str) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
@@ -402,7 +361,7 @@ def train_fine_tuning(df_train, df_valid, df_test, params, synthetic_path):
         tf.keras.metrics.Precision(name="precision"),
         tf.keras.metrics.Recall(name="recall"),
     ]
-    model = create_fine_tunning_cnn(synthetic_path)
+    #model = create_fine_tunning_cnn(synthetic_path)
     model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=tf_metrics)
 
     early_stop = tf.keras.callbacks.EarlyStopping(
@@ -417,17 +376,6 @@ def train_fine_tuning(df_train, df_valid, df_test, params, synthetic_path):
         verbose=2,
     )
     history.history["best_epoch"] = early_stop.best_epoch
-
-    summary = {}
-    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
-    summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
-    summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
-    # operation (train plus val)
-    df_operation = pd.concat([df_train, df_val])
-    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=128)
-    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
-    history.history['summary'] = summary
-
 
     train_state = prepare_model(
         model=model,
@@ -535,5 +483,25 @@ def update_metrics_results(results, metrics):
 
 
 
+def evaluate_tuning( train_state, df_train, df_valid, df_test, params, batch_size=128 ):
 
+    model = build_model(train_state.model_sequence, train_state.model_weights)
+    ds_train = build_dataset(df_train, params["image_shape"], batch_size=batch_size)
+    ds_valid = build_dataset(df_valid, params["image_shape"], batch_size=batch_size)
+    ds_test  = build_dataset(df_test , params["image_shape"], batch_size=batch_size)
+
+
+    summary = {}
+    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
+    summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
+    summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
+    
+    # operation (train plus val)
+    df_operation = pd.concat([df_train, df_valid])
+    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=batch_size)
+    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
+    train_state.history['summary'] = summary
+
+    pprint(summary)
+    return train_state
 

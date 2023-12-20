@@ -21,22 +21,23 @@ from utils.convnets import (
     train_fine_tuning,
     train_interleaved,
     train_neural_net,
+    evaluate_tuning,
 )
 
 
 class TrainCNN(Task):
-    dataset_info = luigi.DictParameter()
-    batch_size = luigi.IntParameter()
-    epochs = luigi.IntParameter()
+
+    dataset_info  = luigi.DictParameter()
+    batch_size    = luigi.IntParameter()
+    epochs        = luigi.IntParameter()
     learning_rate = luigi.IntParameter()
-    image_width = luigi.IntParameter()
-    image_height = luigi.IntParameter()
-    grayscale = luigi.BoolParameter()
-    job = luigi.DictParameter(default={}, significant=False)
+    image_width   = luigi.IntParameter()
+    image_height  = luigi.IntParameter()
+    grayscale     = luigi.BoolParameter()
+    job           = luigi.DictParameter(default={}, significant=False)
 
 
     def log_params(self, dirname=''):
-
         self.set_logger()
 
         logging.info(f"=== Start '{self.__class__.__name__}' ===\n")
@@ -56,6 +57,9 @@ class TrainCNN(Task):
             if key == "dataset_info":
                 continue
             logging.info(f" - {key}: {task_params[key]}")
+        logging.info("")
+        
+        logging.info(f"Experiment hash: {self.get_hash()}")
         logging.info("")
 
         return task_params
@@ -81,36 +85,52 @@ class TrainCNN(Task):
         return luigi.LocalTarget(str(output_file))
 
 
+    #
+    # get data collection from all tasks
+    #
+    def get_data(self, tasks):
+        data_list = []
+        for task in tasks:
+            if type(task) == CrossValidation:
+                data_list.append(pd.read_parquet(task.output().path))
+        data = pd.concat(data_list)
+        data = data.sample(frac=1, random_state=42)
+        return data
+
+
+    def get_sorts(self):
+        return list(range(9)) if not job_params else [job_params['sort']]
+
+    def get_tests():
+        return list(range(10)) if not job_params else [job_params['test']]
+
 
 
 class TrainBaseline(TrainCNN):
     def run(self):
-        task_params = self.log_params()
 
-        metadata_list = []
-        for i in range(len(self.requires())):
-            cross_val_path = self.requires()[i].output().path
-            metadata_list.append(pd.read_parquet(cross_val_path))
-
-        metadata = pd.concat(metadata_list)
-        metadata = metadata.sample(frac=1, random_state=42)
-
-        # training loop
-        job_params = self.get_job_params()  
-        folds = list(range(10)) if not job_params else [job_params['test']]
-        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
+        task_params     = self.log_params()
+        logging.info(f"Running {self.get_task_family()}...")
+    
+        tasks           = self.requires()
+        data            = self.get_data(tasks)
+        job_params      = self.get_job_params()  
         experiment_path = Path(self.get_output_path())
 
         start = default_timer()
-        for i, j in product(folds, inner_folds):
-            logging.info(f"Fold #{i} / Validation #{j}")
-            train_real = split_dataframe(metadata, i, j, "train_real")
-            valid_real = split_dataframe(metadata, i, j, "valid_real")
-            test_real  = split_dataframe(metadata, i, j, "test_real" )
+        for i, j in product(self.get_tests(), self.get_sorts()):
 
-            train_state = train_neural_net(train_real, valid_real, test_real, task_params)
-            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
-            save_train_state(output_path, train_state)
+            logging.info(f"Fold #{i} / Validation #{j}")
+            train_real  = split_dataframe(data, i, j, "train_real")
+            valid_real  = split_dataframe(data, i, j, "valid_real")
+            test_real   = split_dataframe(data, i, j, "test_real" )
+            train_state = train_neural_net(train_real, valid_real, task_params)
+            train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
+
+            if not job_params: # as task
+                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
+                save_train_state(output_path, train_state)
+
         end = default_timer()
 
         # output results
@@ -126,7 +146,7 @@ class TrainBaseline(TrainCNN):
                             dataset_info    = self.dataset_info,
                             hash_experiment = self.get_hash() )
 
-        else: # as single task
+        else: # as task
             with open(self.output().path, "wb") as file:
                 pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -138,33 +158,30 @@ class TrainBaseline(TrainCNN):
 
 
 class TrainSynthetic(TrainCNN):
+
     def run(self):
-        task_params = self.log_params()
 
-        metadata_list = []
-        for i in range(len(self.requires())):
-            cross_val_path = self.requires()[i].output().path
-            metadata_list.append(pd.read_parquet(cross_val_path))
-
-        metadata   = pd.concat(metadata_list)
-        metadata   = metadata.sample(frac=1, random_state=42)
-        job_params = self.get_job_params()   
-
-        # training loop
-        folds = list(range(10)) if not job_params else [job_params['test']]
-        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
+        task_params     = self.log_params()
+        logging.info(f"Running {self.get_task_family()}...")
+    
+        tasks           = self.requires()
+        data            = self.get_data(tasks)
+        job_params      = self.get_job_params()  
         experiment_path = Path(self.get_output_path())
 
         start = default_timer()
-        for i, j in product(folds, inner_folds):
+        for i, j in product(self.get_tests(), self.get_sorts()):
             logging.info(f"Fold #{i} / Validation #{j}")
-            train_fake = split_dataframe(metadata, i, j, "train_fake")
-            valid_real = split_dataframe(metadata, i, j, "valid_real")
-            test_real  = split_dataframe(metadata, i, j, "test_real" )
+            train_fake  = split_dataframe(data, i, j, "train_fake")
+            valid_real  = split_dataframe(data, i, j, "valid_real")
+            test_real   = split_dataframe(data, i, j, "test_real" )
+            train_state = train_neural_net(train_fake, valid_real, task_params)
+            train_state = evaluate_tuning(train_state, train_fake, valid_real, test_real, task_params)
 
-            train_state = train_neural_net(train_fake, valid_real, test_real, task_params)
-            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
-            save_train_state(output_path, train_state)
+            if not job_params: # as task
+                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
+                save_train_state(output_path, train_state)
+
         end = default_timer()
 
         # output results
@@ -181,7 +198,7 @@ class TrainSynthetic(TrainCNN):
                             dataset_info    = self.dataset_info,
                             hash_experiment = self.get_hash() )
 
-        else: # as single task
+        else: # as task
             with open(self.output().path, "wb") as file:
                 pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -194,36 +211,36 @@ class TrainSynthetic(TrainCNN):
 
 
 class TrainInterleaved(TrainCNN):
+
     def run(self):
-        task_params = self.log_params()
-
-        metadata_list = []
-        for i in range(len(self.requires())):
-            cross_val_path = self.requires()[i].output().path
-            metadata_list.append(pd.read_parquet(cross_val_path))
-
-        metadata = pd.concat(metadata_list)
-        metadata = metadata.sample(frac=1, random_state=42)
-        job_params = self.get_job_params()    
-
-        # training loop
-        folds = list(range(10)) if not job_params else [job_params['test']]
-        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
+        task_params     = self.log_params()
+        logging.info(f"Running {self.get_task_family()}...")
+    
+        tasks           = self.requires()
+        data            = self.get_data(tasks)
+        job_params      = self.get_job_params()  
         experiment_path = Path(self.get_output_path())
-
+        
+        # training loop
         start = default_timer()
-        for i, j in product(folds, inner_folds):
+        for i, j in product(self.get_tests(), self.get_sorts()):
             logging.info(f"Fold #{i} / Validation #{j}")
-            train_fake = split_dataframe(metadata, i, j, "train_fake")
-            train_real = split_dataframe(metadata, i, j, "train_real")
-            valid_real = split_dataframe(metadata, i, j, "valid_real")
-            test_real  = split_dataframe(metadata, i, j, "test_real" )
+            train_fake = split_dataframe(data, i, j, "train_fake")
+            train_real = split_dataframe(data, i, j, "train_real")
+            valid_real = split_dataframe(data, i, j, "valid_real")
+            test_real  = split_dataframe(data, i, j, "test_real" )
 
             train_state = train_interleaved(
-                train_real, train_fake, valid_real, test_real, task_params
+                train_real, train_fake, valid_real, task_params
             )
-            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
-            save_train_state(output_path, train_state)
+
+            train_real_fake = pd.concat([train_real, train_fake])
+            train_state = evaluate_tuning(train_state, train_real_fake, valid_real, test_real, task_params)
+
+            if not job_params: # as task
+                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
+                save_train_state(output_path, train_state)
+
 
         end = default_timer()
 
@@ -239,7 +256,7 @@ class TrainInterleaved(TrainCNN):
                             dataset_info    = self.dataset_info,
                             hash_experiment = self.get_hash() )
 
-        else: # as single task
+        else: # as task
             with open(self.output().path, "wb") as file:
                 pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -252,30 +269,26 @@ class TrainInterleaved(TrainCNN):
 
 
 class TrainAltogether(TrainCNN):
+
+
     def run(self):
-        task_params = self.log_params()
-
-        metadata_list = []
-        for i in range(len(self.requires())):
-            cross_val_path = self.requires()[i].output().path
-            metadata_list.append(pd.read_parquet(cross_val_path))
-
-        metadata = pd.concat(metadata_list)
-        metadata = metadata.sample(frac=1, random_state=42)
-        job_params = self.get_job_params()   
-
-        # training loop
-        folds = list(range(10)) if not job_params else [job_params['test']]
-        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
+        task_params     = self.log_params()
+        logging.info(f"Running {self.get_task_family()}...")
+    
+        task            = self.requires()
+        data            = self.get_data(tasks)
+        job_params      = self.get_job_params()  
         experiment_path = Path(self.get_output_path())
-
+  
+        # training loop
         start = default_timer()
-        for i, j in product(folds, inner_folds):
+        for i, j in product(self.get_tests(), self.get_sorts()):
+
             logging.info(f"Fold #{i} / Validation #{j}")
-            train_real = split_dataframe(metadata, i, j, "train_real")
-            train_fake = split_dataframe(metadata, i, j, "train_fake")
-            valid_real = split_dataframe(metadata, i, j, "valid_real")
-            test_real  = split_dataframe(metadata, i, j, "test_real" )
+            train_real = split_dataframe(data, i, j, "train_real")
+            train_fake = split_dataframe(data, i, j, "train_fake")
+            valid_real = split_dataframe(data, i, j, "valid_real")
+            test_real  = split_dataframe(data, i, j, "test_real" )
 
             real_weights = (1 / len(train_real)) * np.ones(len(train_real))
             fake_weights = (1 / len(train_fake)) * np.ones(len(train_fake))
@@ -283,14 +296,15 @@ class TrainAltogether(TrainCNN):
             weights = weights / sum(weights)
 
             train_state = train_altogether(
-                train_real, train_fake, valid_real, test_real, weights, task_params
+                train_real, train_fake, valid_real, weights, task_params
             )
-            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
 
-            save_train_state(output_path, train_state)
+            train_real_fake = pd.concat([train_real, train_fake])
+            train_state = evaluate_tuning(train_state, train_real_fake, valid_real, test_real, task_params)
 
-
-
+            if not job_params:
+                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
+                save_train_state(output_path, train_state)
 
         end = default_timer()
 
@@ -318,7 +332,30 @@ class TrainAltogether(TrainCNN):
 
 
 class TrainBaselineFineTuning(TrainCNN):
+
+
+    def get_parent_model(self, test, sort):
+           
+        job_params = self.get_job_params()  
+        if job_params and job_params['parent']:
+            # load model
+            model_path = job_params['parent'] + f'/job.test_{test}.sort_{sort}'
+            with open(model_path+'/output.pkl', 'r') as f:
+                model = build_model( f['model']['sequence'], f['model']['weights'])
+        else:
+            tasks           = self.requires()
+            experiement_path= Path(tasks[0].get_output_path())
+            logging.info(f"Baseline Experiment: {experiment_path}\n")
+            model_path      = experiment_path / f"cnn_fold{i}/sort{j}/"
+            model           = create_fine_tunning_cnn(model_path)
+
+        return model
+
+
+
+
     def requires(self) -> list:
+
         baseline_info = defaultdict(dict)
         for dataset in self.dataset_info:
             baseline_info[dataset]["tag"] = self.dataset_info[dataset]["tag"]
@@ -338,58 +375,43 @@ class TrainBaselineFineTuning(TrainCNN):
         )
 
         required_tasks = [baseline_train]
-        for dataset in self.dataset_info:
-            for source in self.dataset_info[dataset]["sources"]:
-                required_tasks.append(
-                    CrossValidation(
-                        dataset,
-                        self.dataset_info[dataset]["tag"],
-                        source,
-                        self.dataset_info[dataset]["sources"][source],
-                    )
-                )
-
+        required_tasks.update( TrainCNN.requires() )
         return required_tasks
 
+
     def run(self):
-        task_params = self.log_params()
-
-        required_params = self.requires()[0].param_args
-        baseline_task = TrainBaseline(*required_params)
-        baseline_path = Path(baseline_task.get_output_path())
-        logging.info(f"Baseline Experiment: {baseline_path}\n")
-
-        metadata_list = []
-        for i in range(len(self.requires())):
-            if i == 0:
-                continue
-            cross_val_path = self.requires()[i].output().path
-            metadata_list.append(pd.read_parquet(cross_val_path))
-
-        metadata = pd.concat(metadata_list)
-        metadata = metadata.sample(frac=1, random_state=42)
-        job_params = self.get_job_params()  
-
-        # training loop
-        folds = list(range(10)) if not job_params else [job_params['test']]
-        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
+        
+        task_params     = self.log_params()
+        logging.info(f"Running {self.get_task_family()}...")
+    
+        tasks           = self.requires()
+        data            = self.get_data(tasks)
+        job_params      = self.get_job_params()  
         experiment_path = Path(self.get_output_path())
 
+        # training loop
         start = default_timer()
-        for i, j in product(folds, inner_folds):
+        for i, j in product(self.get_tests(), self.get_sorts()):
             logging.info(f"Fold #{i} / Validation #{j}")
-            model_path = baseline_path / f"cnn_fold{i}/sort{j}/"
-            train_fake = split_dataframe(metadata, i, j, "train_fake")
-            valid_real = split_dataframe(metadata, i, j, "valid_real")
-            test_real  = split_dataframe(metadata, i, j, "test_real" )
+            train_fake = split_dataframe(data, i, j, "train_fake")
+            valid_real = split_dataframe(data, i, j, "valid_real")
+            test_real  = split_dataframe(data, i, j, "test_real" )
 
-        
+            #
+            # get the model from base experiment
+            #
+            model      = self.get_parent_model(i,j)
+
             train_state = train_fine_tuning(
-                train_fake, valid_real, test_real, task_params, model_path
+                train_fake, valid_real, test_real, task_params, model
             )
-            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
 
-            save_train_state(output_path, train_state)
+            train_state = evaluate_tuning(train_state, train_fake, valid_real, test_real, task_params)
+
+            if not job_params:
+                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
+                save_train_state(output_path, train_state)
+
         end = default_timer()
 
         # output results
@@ -419,6 +441,26 @@ class TrainBaselineFineTuning(TrainCNN):
 
 
 class TrainFineTuning(TrainCNN):
+
+
+    def get_parent_model(self, test, sort):
+           
+        job_params = self.get_job_params()  
+        if job_params and job_params['parent']:
+            # load model
+            model_path = job_params['parent'] + f'/job.test_{test}.sort_{sort}'
+            with open(model_path+'/output.pkl', 'r') as f:
+                model = build_model( f['model']['sequence'], f['model']['weights'])
+        else:
+            tasks           = self.requires()
+            experiement_path= Path(tasks[0].get_output_path())
+            logging.info(f"Synthetic Experiment: {experiment_path}\n")
+            model_path      = experiment_path / f"cnn_fold{i}/sort{j}/"
+            model           = create_fine_tunning_cnn(model_path)
+
+        return model
+
+
     def requires(self) -> list[TrainSynthetic]:
         synthetic_train = TrainSynthetic(
             dataset_info=self.dataset_info,
@@ -430,50 +472,44 @@ class TrainFineTuning(TrainCNN):
             grayscale=self.grayscale,
             job_params=self.job_params,
         )
+        required_tasks = [synthetic_train]
+        required_tasks.update( TrainCNN.requires() )
+        return required_tasks
 
-        return [synthetic_train]
 
     def run(self):
-        task_params = self.log_params()
 
-        synthetic_task = TrainSynthetic(
-            dataset_info=self.dataset_info,
-            batch_size=self.batch_size,
-            epochs=self.epochs,
-            learning_rate=self.learning_rate,
-            image_width=self.image_width,
-            image_height=self.image_height,
-            grayscale=self.grayscale,
-            job_params=self.job_params,
-        )
-        synthetic_path = Path(synthetic_task.get_output_path())
+        task_params     = self.log_params()
+        logging.info(f"Running {self.get_task_family()}...")
 
-        metadata_list = []
-        for i in range(len(self.requires())):
-            metadata_list.append(pd.read_parquet(self.requires()[i].output().path))
-
-        metadata = pd.concat(metadata_list)
-        metadata = metadata.sample(frac=1, random_state=42)
-        job_params      = self.get_job_params() 
-
-        # training loop
-        folds = list(range(10)) if not job_params else [job_params['test']]
-        inner_folds = list(range(9)) if not job_params else [job_params['sort']]
+        tasks           = self.requires()
+        data            = self.get_data(tasks)
         experiment_path = Path(self.get_output_path())
-
+        job_params      = self.get_job_params()  
+        
+        # training loop
         start = default_timer()
-        for i, j in product(folds, inner_folds):
+        for i, j in product(self.get_tests(), self.get_sorts()):
             logging.info(f"Fold #{i} / Validation #{j}")
-            model_path = synthetic_path / f"cnn_fold{i}/sort{j}/"
-            train_real = split_dataframe(metadata, i, j, "train_real")
-            valid_real = split_dataframe(metadata, i, j, "valid_real")
-            test_real  = split_dataframe(metadata, i, j, "test_real" )
+            train_real = split_dataframe(data, i, j, "train_real")
+            valid_real = split_dataframe(data, i, j, "valid_real")
+            test_real  = split_dataframe(data, i, j, "test_real" )
+
+            #
+            # get the model from base experiment
+            #
+            model      = self.get_parent_model(i,j)
 
             train_state = train_fine_tuning(
-                train_real, valid_real, test_real, task_params, model_path
+                train_real, valid_real, task_params, model_path
             )
-            output_path = experiment_path/f"fold{i}/sort{j}/" if not job_params else experiment_path
-            save_train_state(output_path, train_state)
+
+            train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
+
+            if not job_params:
+                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
+                save_train_state(output_path, train_state)
+
         end = default_timer()
 
         # output results
