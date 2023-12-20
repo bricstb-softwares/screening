@@ -1,4 +1,4 @@
-import logging
+
 import os
 import pickle
 import tarfile
@@ -15,7 +15,7 @@ from utils.report import (
     plot_roc_curve,
     report_training,
 )
-
+from loguru import logger
 
 class ReportCNN(Task):
     experiment_hash = luigi.Parameter()
@@ -47,19 +47,19 @@ class ReportCNN(Task):
     def run(self):
         # type: () -> None
         self.set_logger()
-        logging.info(f"=== Start '{self.__class__.__name__}' === \n")
+        logger.info(f"=== Start '{self.__class__.__name__}' === \n")
 
         task_params = self.__dict__["param_kwargs"].copy()
-        logging.info(f"Experiment Hash: {task_params['experiment_hash']}")
-        logging.info("Dataset Info:")
+        logger.info(f"Experiment Hash: {task_params['experiment_hash']}")
+        logger.info("Dataset Info:")
         for dataset in self.dataset_info:
-            logging.info(f" {dataset}")
+            logger.info(f" {dataset}")
             database = self.dataset_info[dataset]
             tag = database["tag"]
-            logging.info(f" - tag: {tag}")
+            logger.info(f" - tag: {tag}")
             for source in database["sources"]:
-                logging.info(f" - source: {source}")
-        logging.info("\n")
+                logger.info(f" - source: {source}")
+        logger.info("\n")
 
         metadata_list = []
         for i in range(len(self.requires())):
@@ -78,7 +78,7 @@ class ReportCNN(Task):
             sp_who, best_sort_val = -np.inf, None
 
             for j in inner_folds:
-                logging.info(f"Fold {i} / Inner Fold {j}")
+                logger.info(f"Fold {i} / Inner Fold {j}")
                 results_path = experiment_path / f"cnn_fold{i}/sort{j}"
                 output_path = Path(self.get_output_path()) / f"cnn_fold{i}/sort{j}"
                 if not output_path.exists():
@@ -137,8 +137,8 @@ class ReportCNN(Task):
                 p = os.path.join(output_path, fn)
                 tar.add(p, arcname=fn)
 
-        logging.info("")
-        logging.info(f" - Output: {self.get_output_path()}")
-        logging.info("")
-        logging.info(f"=== End: '{self.__class__.__name__}' ===")
-        logging.info("")
+        logger.info("")
+        logger.info(f" - Output: {self.get_output_path()}")
+        logger.info("")
+        logger.info(f"=== End: '{self.__class__.__name__}' ===")
+        logger.info("")

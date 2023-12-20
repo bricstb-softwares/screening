@@ -1,4 +1,6 @@
 
+import argparse, os, sys, luigi
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -14,30 +16,21 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-    
-
-for test in range(10):
-    for sort in range(9):
-
-        train_path = args.experiment_path + f'/cnn_fold{test}/sort{sort}'
-
-        weights_path = os.path.join(train_path, "model_weights.pkl")
-        history_path = os.path.join(train_path, "history.pkl")
-        params_path  = os.path.join(train_path, "parameters.pkl")
-
-        with open(history_path, 'r') as f:
-            history = json.load(f)
-        with open(params_path, 'r') as f:
-            model_params = json.load(f)
-        with open(weights_path, 'r') as f:
-            weights = json.load(f)
-
-        image_shape = model_params["image_shape"]
-        model = create_cnn(image_shape)
-        model.set_weights(weights)
-
-        # build the original model
-        train_state = prepare_model(model, history, model_params)
+if len(sys.argv)==1:
+    parser.print_help()
+    sys.exit(1)
+      
 
 
 
+from pipelines.converter import BaselinePipeline
+pipeline = [BaselinePipeline(experiment_path=args.experiment_path, output_path=args.task_output )]
+luigi.interface.core.log_level = "WARNING"
+luigi.build(pipeline, workers=1, local_scheduler=True)
+
+#task = BaselineCnv(
+#            experiment_path = args.experiment_path, 
+#            output_path     = args.task_output
+#        )
+#task.requires()
+#task.run()

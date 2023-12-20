@@ -1,21 +1,23 @@
 from __future__ import annotations
 
-import logging
 import pickle
+import luigi
+import numpy as np
+import pandas as pd
+
 from collections import defaultdict
 from datetime import timedelta
 from itertools import product
 from pathlib import Path
 from timeit import default_timer
-
-import luigi
-import numpy as np
-import pandas as pd
+from loguru import logger
 from tasks.commons import Task
 from tasks.data import CrossValidation
 from utils.convnets import (
     save_train_state,
     save_job_state,
+    build_model_from_job,
+    build_model_from_train_state,
     split_dataframe,
     train_altogether,
     train_fine_tuning,
@@ -40,27 +42,27 @@ class TrainCNN(Task):
     def log_params(self, dirname=''):
         self.set_logger()
 
-        logging.info(f"=== Start '{self.__class__.__name__}' ===\n")
-        logging.info("Dataset Info:")
+        logger.info(f"=== Start '{self.__class__.__name__}' ===\n")
+        logger.info("Dataset Info:")
         task_params = self.__dict__["param_kwargs"].copy()
 
         for dataset in task_params["dataset_info"]:
             tag = task_params["dataset_info"][dataset]["tag"]
             sources = sorted(task_params["dataset_info"][dataset]["sources"].keys())
-            logging.info(f"{dataset}")
-            logging.info(f" - tag: {tag}")
-            logging.info(f" - sources: {sources}")
-        logging.info("\n")
+            logger.info(f"{dataset}")
+            logger.info(f" - tag: {tag}")
+            logger.info(f" - sources: {sources}")
+        logger.info("\n")
 
-        logging.info("Training Parameters:")
+        logger.info("Training Parameters:")
         for key in task_params:
             if key == "dataset_info":
                 continue
-            logging.info(f" - {key}: {task_params[key]}")
-        logging.info("")
+            logger.info(f" - {key}: {task_params[key]}")
+        logger.info("")
         
-        logging.info(f"Experiment hash: {self.get_hash()}")
-        logging.info("")
+        logger.info(f"Experiment hash: {self.get_hash()}")
+        logger.info("")
 
         return task_params
 
@@ -76,7 +78,6 @@ class TrainCNN(Task):
                         self.dataset_info[dataset]["sources"][source],
                     )
                 )
-
         return required_tasks
 
     def output(self) -> luigi.LocalTarget:
@@ -99,9 +100,11 @@ class TrainCNN(Task):
 
 
     def get_sorts(self):
+        job_params = self.get_job_params()  
         return list(range(9)) if not job_params else [job_params['sort']]
 
-    def get_tests():
+    def get_tests(self):
+        job_params = self.get_job_params()  
         return list(range(10)) if not job_params else [job_params['test']]
 
 
@@ -110,7 +113,7 @@ class TrainBaseline(TrainCNN):
     def run(self):
 
         task_params     = self.log_params()
-        logging.info(f"Running {self.get_task_family()}...")
+        logger.info(f"Running {self.get_task_family()}...")
     
         tasks           = self.requires()
         data            = self.get_data(tasks)
@@ -120,7 +123,7 @@ class TrainBaseline(TrainCNN):
         start = default_timer()
         for i, j in product(self.get_tests(), self.get_sorts()):
 
-            logging.info(f"Fold #{i} / Validation #{j}")
+            logger.info(f"Fold #{i} / Validation #{j}")
             train_real  = split_dataframe(data, i, j, "train_real")
             valid_real  = split_dataframe(data, i, j, "valid_real")
             test_real   = split_dataframe(data, i, j, "test_real" )
@@ -138,23 +141,22 @@ class TrainBaseline(TrainCNN):
         task_params["training_time"] = timedelta(seconds=(end - start))
 
         if job_params: # as job
-            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
-            save_job_state( self.output().path, metadata,
+            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            save_job_state( self.output().path,
                             train_state, 
                             job_params      = job_params, 
                             task_params     = task_params,
-                            dataset_info    = self.dataset_info,
                             hash_experiment = self.get_hash() )
 
         else: # as task
             with open(self.output().path, "wb") as file:
                 pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 
-        logging.info("")
-        logging.info(f" - Output: {self.get_output_path()}")
-        logging.info("")
-        logging.info(f"=== End: '{self.__class__.__name__}' ===")
-        logging.info("")
+        logger.info("")
+        logger.info(f" - Output: {self.get_output_path()}")
+        logger.info("")
+        logger.info(f"=== End: '{self.__class__.__name__}' ===")
+        logger.info("")
 
 
 class TrainSynthetic(TrainCNN):
@@ -162,7 +164,7 @@ class TrainSynthetic(TrainCNN):
     def run(self):
 
         task_params     = self.log_params()
-        logging.info(f"Running {self.get_task_family()}...")
+        logger.info(f"Running {self.get_task_family()}...")
     
         tasks           = self.requires()
         data            = self.get_data(tasks)
@@ -171,7 +173,7 @@ class TrainSynthetic(TrainCNN):
 
         start = default_timer()
         for i, j in product(self.get_tests(), self.get_sorts()):
-            logging.info(f"Fold #{i} / Validation #{j}")
+            logger.info(f"Fold #{i} / Validation #{j}")
             train_fake  = split_dataframe(data, i, j, "train_fake")
             valid_real  = split_dataframe(data, i, j, "valid_real")
             test_real   = split_dataframe(data, i, j, "test_real" )
@@ -190,7 +192,7 @@ class TrainSynthetic(TrainCNN):
 
 
         if job_params: # as job
-            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
             save_job_state( self.output().path, metadata,
                             train_state, 
                             job_params      = job_params, 
@@ -203,18 +205,18 @@ class TrainSynthetic(TrainCNN):
                 pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-        logging.info("")
-        logging.info(f" - Output: {self.get_output_path()}")
-        logging.info("")
-        logging.info(f"=== End: '{self.__class__.__name__}' ===")
-        logging.info("")
+        logger.info("")
+        logger.info(f" - Output: {self.get_output_path()}")
+        logger.info("")
+        logger.info(f"=== End: '{self.__class__.__name__}' ===")
+        logger.info("")
 
 
 class TrainInterleaved(TrainCNN):
 
     def run(self):
         task_params     = self.log_params()
-        logging.info(f"Running {self.get_task_family()}...")
+        logger.info(f"Running {self.get_task_family()}...")
     
         tasks           = self.requires()
         data            = self.get_data(tasks)
@@ -224,7 +226,7 @@ class TrainInterleaved(TrainCNN):
         # training loop
         start = default_timer()
         for i, j in product(self.get_tests(), self.get_sorts()):
-            logging.info(f"Fold #{i} / Validation #{j}")
+            logger.info(f"Fold #{i} / Validation #{j}")
             train_fake = split_dataframe(data, i, j, "train_fake")
             train_real = split_dataframe(data, i, j, "train_real")
             valid_real = split_dataframe(data, i, j, "valid_real")
@@ -248,7 +250,7 @@ class TrainInterleaved(TrainCNN):
         task_params["training_time"] = timedelta(seconds=(end - start))
         
         if job_params: # as job
-            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
             save_job_state( self.output().path, metadata,
                             train_state, 
                             job_params      = job_params, 
@@ -261,11 +263,11 @@ class TrainInterleaved(TrainCNN):
                 pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 
         
-        logging.info("")
-        logging.info(f" - Output: {self.get_output_path()}")
-        logging.info("")
-        logging.info(f"=== End: '{self.__class__.__name__}' ===")
-        logging.info("")
+        logger.info("")
+        logger.info(f" - Output: {self.get_output_path()}")
+        logger.info("")
+        logger.info(f"=== End: '{self.__class__.__name__}' ===")
+        logger.info("")
 
 
 class TrainAltogether(TrainCNN):
@@ -273,7 +275,7 @@ class TrainAltogether(TrainCNN):
 
     def run(self):
         task_params     = self.log_params()
-        logging.info(f"Running {self.get_task_family()}...")
+        logger.info(f"Running {self.get_task_family()}...")
     
         task            = self.requires()
         data            = self.get_data(tasks)
@@ -284,7 +286,7 @@ class TrainAltogether(TrainCNN):
         start = default_timer()
         for i, j in product(self.get_tests(), self.get_sorts()):
 
-            logging.info(f"Fold #{i} / Validation #{j}")
+            logger.info(f"Fold #{i} / Validation #{j}")
             train_real = split_dataframe(data, i, j, "train_real")
             train_fake = split_dataframe(data, i, j, "train_fake")
             valid_real = split_dataframe(data, i, j, "valid_real")
@@ -312,7 +314,7 @@ class TrainAltogether(TrainCNN):
         task_params["training_time"] = timedelta(seconds=(end - start))
         
         if job_params: # as job
-            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
             save_job_state( self.output().path, metadata,
                             train_state, 
                             job_params      = job_params, 
@@ -324,11 +326,11 @@ class TrainAltogether(TrainCNN):
             with open(self.output().path, "wb") as file:
                 pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 
-        logging.info("")
-        logging.info(f" - Output: {self.get_output_path()}")
-        logging.info("")
-        logging.info(f"=== End: '{self.__class__.__name__}' ===")
-        logging.info("")
+        logger.info("")
+        logger.info(f" - Output: {self.get_output_path()}")
+        logger.info("")
+        logger.info(f"=== End: '{self.__class__.__name__}' ===")
+        logger.info("")
 
 
 class TrainBaselineFineTuning(TrainCNN):
@@ -338,16 +340,13 @@ class TrainBaselineFineTuning(TrainCNN):
            
         job_params = self.get_job_params()  
         if job_params and job_params['parent']:
-            # load model
             model_path = job_params['parent'] + f'/job.test_{test}.sort_{sort}'
-            with open(model_path+'/output.pkl', 'r') as f:
-                model = build_model( f['model']['sequence'], f['model']['weights'])
+            model, _, _     = build_model_from_job( model_path+'/output.pkl' )
         else:
             tasks           = self.requires()
             experiement_path= Path(tasks[0].get_output_path())
-            logging.info(f"Baseline Experiment: {experiment_path}\n")
-            model_path      = experiment_path / f"cnn_fold{i}/sort{j}/"
-            model           = create_fine_tunning_cnn(model_path)
+            model_path      = experiment_path / f"cnn_fold{test}/sort{sort}/"
+            model, _, _     = build_model_from_train_state( model_path )
 
         return model
 
@@ -382,7 +381,7 @@ class TrainBaselineFineTuning(TrainCNN):
     def run(self):
         
         task_params     = self.log_params()
-        logging.info(f"Running {self.get_task_family()}...")
+        logger.info(f"Running {self.get_task_family()}...")
     
         tasks           = self.requires()
         data            = self.get_data(tasks)
@@ -392,7 +391,7 @@ class TrainBaselineFineTuning(TrainCNN):
         # training loop
         start = default_timer()
         for i, j in product(self.get_tests(), self.get_sorts()):
-            logging.info(f"Fold #{i} / Validation #{j}")
+            logger.info(f"Fold #{i} / Validation #{j}")
             train_fake = split_dataframe(data, i, j, "train_fake")
             valid_real = split_dataframe(data, i, j, "valid_real")
             test_real  = split_dataframe(data, i, j, "test_real" )
@@ -419,7 +418,7 @@ class TrainBaselineFineTuning(TrainCNN):
         task_params["training_time"] = timedelta(seconds=(end - start))
     
         if job_params: # as job
-            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
             save_job_state( self.output().path, metadata,
                             train_state, 
                             job_params      = job_params, 
@@ -433,11 +432,11 @@ class TrainBaselineFineTuning(TrainCNN):
 
         
 
-        logging.info("")
-        logging.info(f" - Output: {self.get_output_path()}")
-        logging.info("")
-        logging.info(f"=== End: '{self.__class__.__name__}' ===")
-        logging.info("")
+        logger.info("")
+        logger.info(f" - Output: {self.get_output_path()}")
+        logger.info("")
+        logger.info(f"=== End: '{self.__class__.__name__}' ===")
+        logger.info("")
 
 
 class TrainFineTuning(TrainCNN):
@@ -447,16 +446,13 @@ class TrainFineTuning(TrainCNN):
            
         job_params = self.get_job_params()  
         if job_params and job_params['parent']:
-            # load model
             model_path = job_params['parent'] + f'/job.test_{test}.sort_{sort}'
-            with open(model_path+'/output.pkl', 'r') as f:
-                model = build_model( f['model']['sequence'], f['model']['weights'])
+            model, _, _     = build_model_from_job( model_path+'/output.pkl' )
         else:
             tasks           = self.requires()
             experiement_path= Path(tasks[0].get_output_path())
-            logging.info(f"Synthetic Experiment: {experiment_path}\n")
-            model_path      = experiment_path / f"cnn_fold{i}/sort{j}/"
-            model           = create_fine_tunning_cnn(model_path)
+            model_path      = experiment_path / f"cnn_fold{test}/sort{sort}/"
+            model, _, _     = build_model_from_train_state( model_path )
 
         return model
 
@@ -480,7 +476,7 @@ class TrainFineTuning(TrainCNN):
     def run(self):
 
         task_params     = self.log_params()
-        logging.info(f"Running {self.get_task_family()}...")
+        logger.info(f"Running {self.get_task_family()}...")
 
         tasks           = self.requires()
         data            = self.get_data(tasks)
@@ -490,7 +486,7 @@ class TrainFineTuning(TrainCNN):
         # training loop
         start = default_timer()
         for i, j in product(self.get_tests(), self.get_sorts()):
-            logging.info(f"Fold #{i} / Validation #{j}")
+            logger.info(f"Fold #{i} / Validation #{j}")
             train_real = split_dataframe(data, i, j, "train_real")
             valid_real = split_dataframe(data, i, j, "valid_real")
             test_real  = split_dataframe(data, i, j, "test_real" )
@@ -499,10 +495,10 @@ class TrainFineTuning(TrainCNN):
             # get the model from base experiment
             #
             model      = self.get_parent_model(i,j)
-
+                        
             train_state = train_fine_tuning(
-                train_real, valid_real, task_params, model_path
-            )
+                        train_real, valid_real, task_params, model
+                    )
 
             train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
 
@@ -517,7 +513,7 @@ class TrainFineTuning(TrainCNN):
         task_params["training_time"] = timedelta(seconds=(end - start))
 
         if job_params: # as job
-            logging.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
+            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
             save_job_state( self.output().path, metadata,
                             train_state, 
                             job_params      = job_params, 
@@ -531,8 +527,8 @@ class TrainFineTuning(TrainCNN):
 
         
 
-        logging.info("")
-        logging.info(f" - Output: {self.get_output_path()}")
-        logging.info("")
-        logging.info(f"=== End: '{self.__class__.__name__}' ===")
-        logging.info("")
+        logger.info("")
+        logger.info(f" - Output: {self.get_output_path()}")
+        logger.info("")
+        logger.info(f"=== End: '{self.__class__.__name__}' ===")
+        logger.info("")

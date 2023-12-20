@@ -9,8 +9,6 @@ TARGET_DIR = os.environ["TARGET_DIR"]
 
 class Task(LuigiTask):
     
-
-
     def get_output_path(self):    
         hash_experiment = self.get_task_family() + "_%s" % self.get_hash()
         output_path = os.path.join(TARGET_DIR, hash_experiment) if not self.get_job_params() else os.getcwd()

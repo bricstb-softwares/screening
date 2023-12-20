@@ -20,8 +20,11 @@ from tensorflow.keras.models import model_from_json
 from utils import report
 from pprint import pprint
 
-#MEMORY = Memory("/tmp/LTBI", verbose=0)
+from loguru import logger
 
+#
+# dataset preparation
+#
 
 def split_dataframe(df, fold, inner_fold, type_set):
     # type: (pd.DataFrame, int, int, str) -> pd.DataFrame
@@ -59,50 +62,22 @@ def split_dataframe(df, fold, inner_fold, type_set):
     return res[["source", "path", "label"]]
 
 
-def filter_metadata(metadata, partition, fold, sort):
-    # type: (pd.DataFrame, str, int, int) -> pd.DataFrame
-    metadata = metadata[
-        (metadata["dataset"] == partition.lower())
-        & (metadata["test"] == fold)
-        & (metadata["sort"] == sort)
-        & (metadata["type"] == "real")
-    ]
-    metadata = metadata.rename(columns={"raw_image_path": "path", "target": "label"})
-
-    return metadata
-
-
-def _decode_image(path, label, image_shape, channels=3):
-    # type: (str, int, list[int], int) -> T.Union[list, int]
-    image_encoded = tf.io.read_file(path)
-    image = tf.io.decode_jpeg(image_encoded, channels=channels)
-    image = tf.image.convert_image_dtype(image, tf.float32)
-    image = tf.image.resize(image, image_shape)
-    label = tf.cast(label, tf.int32)
-
-    return image, label
-
-
-def _decode_weighted_image(path, label, weight, image_shape, channels=3):
-    # type: (str, int, float, list[int], int) -> T.Union[list, int, float]
-    image_encoded = tf.io.read_file(path)
-    image = tf.io.decode_jpeg(image_encoded, channels=channels)
-    image = tf.image.convert_image_dtype(image, tf.float32)
-    image = tf.image.resize(image, image_shape)
-    label = tf.cast(label, tf.int32)
-    weight = tf.cast(weight, tf.float32)
-
-    return image, label, weight
-
-
 def build_dataset(df, image_shape, batch_size):
     # type: (pd.DataFrame, list[int], int) -> tf.data.Dataset
+    def _decode_image(path, label, image_shape, channels=3):
+        # type: (str, int, list[int], int) -> T.Union[list, int]
+        image_encoded = tf.io.read_file(path)
+        image = tf.io.decode_jpeg(image_encoded, channels=channels)
+        image = tf.image.convert_image_dtype(image, tf.float32)
+        image = tf.image.resize(image, image_shape)
+        label = tf.cast(label, tf.int32)
+        return image, label
+
     ds_path = tf.data.Dataset.from_tensor_slices(df["path"])
     ds_label = tf.data.Dataset.from_tensor_slices(df["label"])
     ds = tf.data.Dataset.zip((ds_path, ds_label))
     ds = ds.map(lambda p, l: _decode_image(p, l, image_shape))
     ds = ds.batch(batch_size, drop_remainder=False)
-
     return ds
 
 
@@ -124,23 +99,31 @@ def build_interleaved_dataset(df_real, df_fake, image_shape, batch_size):
     repeat = np.ceil(df_real.shape[0] / batch_size)
     choice_dataset = tf.data.Dataset.range(len(datasets)).repeat(repeat)
     ds = tf.data.Dataset.choose_from_datasets(datasets, choice_dataset)
-
     return ds
+
 
 
 def build_altogether_dataset(df, image_shape, batch_size):
     # type: (pd.DataFrame, list[int], int) -> tf.data.Dataset
+    def _decode_weighted_image(path, label, weight, image_shape, channels=3):
+        # type: (str, int, float, list[int], int) -> T.Union[list, int, float]
+        image_encoded = tf.io.read_file(path)
+        image = tf.io.decode_jpeg(image_encoded, channels=channels)
+        image = tf.image.convert_image_dtype(image, tf.float32)
+        image = tf.image.resize(image, image_shape)
+        label = tf.cast(label, tf.int32)
+        weight = tf.cast(weight, tf.float32)
+        return image, label, weight
+
     ds = tf.data.Dataset.from_tensor_slices((df["path"], df["label"], df["weights"]))
     ds = ds.map(lambda p, l, w: _decode_weighted_image(p, l, w, image_shape))
     ds = ds.batch(batch_size, drop_remainder=False)
-
     return ds
 
 
-def build_model( sequence, weights ):
-    model = model_from_json( json.dumps(sequence, separators=(',', ':')) )
-    model.set_weights(weights)
-    return model
+#
+# model preparation
+#
 
 
 def create_cnn(image_shape):
@@ -178,21 +161,6 @@ def create_cnn(image_shape):
 
 
 
-def create_fine_tunning_cnn(synthetic_path):
-    # type: (str) -> tf.python.keras.models.Sequential
-    weights_path = os.path.join(synthetic_path, "model_weights.pkl")
-    model_params = pd.read_pickle(os.path.join(synthetic_path, "parameters.pkl"))
-    image_shape = model_params["image_shape"]
-
-    model = create_cnn(image_shape)
-    model.set_weights(pd.read_pickle(weights_path))
-
-    for layer in model.layers[:-2]:
-        layer.trainable = False
-
-    return model
-
-
 @dataclass
 class ConvNetState:
     model_sequence: dict 
@@ -200,14 +168,129 @@ class ConvNetState:
     history: dict[str, list]
     parameters: dict
 
-
 def prepare_model(model, history, params):
     # type: (tf.python.keras.models.Sequential, dict, dict) -> ConvNetState
     train_state = ConvNetState(json.loads(model.to_json()), model.get_weights(), history, params)
     return train_state
 
 
-#@MEMORY.cache
+#
+# save
+#
+
+
+# as task 
+def save_train_state(output_path : str, train_state : str, tar : bool=False):
+    # type: (Path, ConvNetState) -> None
+    if not output_path.exists():
+        output_path.mkdir(parents=True)
+
+    filepaths = []
+    def _save_pickle(attribute_name) -> None:
+        path = output_path / f"{attribute_name}.pkl"
+        with open(path, "wb") as file:
+            pickle.dump(
+                getattr(train_state, attribute_name), file, pickle.HIGHEST_PROTOCOL
+            )
+        filepaths.append(path)
+
+    _save_pickle("model_weights")
+    _save_pickle("history")
+    _save_pickle("parameters")
+
+    if tar:
+        tar_path = output_path / f"{output_path.name}.tar.gz"
+        with tarfile.open(tar_path, "w:gz") as tar:
+            for filepath in filepaths:
+                tar.add(filepath)
+
+
+# as job
+def save_job_state( path            : str, 
+                    train_state     : ConvNetState, 
+                    job_params      : dict, 
+                    task_params     : dict, 
+                    experiment_hash : str, 
+                    experiment_type : str, 
+                    metadata        : dict={}):
+    
+    test = job_params['test']
+    sort = job_params['sort']
+
+    with open(path, 'wb') as file:
+
+        d = {
+            'model': {
+                'weights'   : train_state.model_weights, 
+                'sequence'  : train_state.model_sequence,
+                'history'   : train_state.history,
+            },
+            'test'        : test,
+            'sort'        : sort,
+            'time'        : task_params['training_time'],
+            'hash'        : experiment_hash,
+            'type'        : experiment_type,   
+            'metadata'    : metadata,
+            'params'      : task_params,
+            '__version__' : 1
+        }
+
+        pickle.dump(d, file, pickle.HIGHEST_PROTOCOL)
+
+
+#
+# Loaders
+#
+
+
+
+def build_model_from_train_state( train_state ):
+
+    if type(train_state) == str:
+        # load weights  
+        model_path = train_state
+        weights_path = os.path.join(model_path, "model_weights.pkl")
+        weights      = pickle.load( open(weights_path, 'rb') )
+        # load params
+        params_path  = os.path.join(model_path, "parameters.pkl")
+        model_params = pickle.load( open(params_path, 'rb' ))
+        # build model
+        image_shape  = model_params["image_shape"]
+        model        = create_cnn(image_shape)
+        model.set_weights(weights)
+        # load history
+        history_path = os.path.join(model_path, 'history.pkl')
+        history      = pickle.load(open(history_path, 'rb'))
+        return model, history, model_params
+
+    else:
+        # get the model sequence
+        sequence = train_state.model_sequence
+        weights  = train_state.model_weights
+        model = model_from_json( json.dumps(sequence, separators=(',', ':')) )
+        # load the weights
+        model.set_weights(weights)
+        return model, train_state.history, train_state.parameters
+
+def build_model_from_job( job_path ):
+
+    with open( job_path, 'r') as f:
+        sequence = f['model']['sequence']
+        weights  = f['model']['weights']
+        history  = f['model']['history']
+        params   = f['params']
+        # build model
+        model = model_from_json( json.dumps(sequence, separators=(',', ':')) )
+        model.set_weights(weights)
+        return model, history, params
+
+
+
+#
+# training
+#
+
+
 def train_neural_net(df_train, df_valid, params):
 
     # type: (pd.DataFrame, pd.DataFrame, dict[str, T.Any]) -> ConvNetState
@@ -235,7 +318,7 @@ def train_neural_net(df_train, df_valid, params):
 
     history = model.fit(
         ds_train,
-        epochs= 2,#params["epochs"],
+        epochs=2,#params["epochs"],
         validation_data=ds_valid,
         callbacks=[early_stop],
         verbose=1,
@@ -251,7 +334,6 @@ def train_neural_net(df_train, df_valid, params):
     return train_state
 
 
-#@MEMORY.cache
 def train_interleaved(df_train_real, df_train_fake, df_valid_real, params):
     # type: (pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, T.Any]) -> ConvNetState
     if "image_shape" not in list(params.keys()):
@@ -296,7 +378,6 @@ def train_interleaved(df_train_real, df_train_fake, df_valid_real, params):
     return train_state
 
 
-#@MEMORY.cache
 def train_altogether(df_train_real, df_train_fake, df_valid_real, weights, params):
     # type: (pd.DataFrame, pd.DataFrame, pd.DataFrame, list, dict[str, T.Any]) -> ConvNetState
     if "image_shape" not in list(params.keys()):
@@ -344,8 +425,7 @@ def train_altogether(df_train_real, df_train_fake, df_valid_real, weights, param
     return train_state
 
 
-#@MEMORY.cache
-def train_fine_tuning(df_train, df_valid, params, synthetic_path):
+def train_fine_tuning(df_train, df_valid, params, model):
     # type: (pd.DataFrame, pd.DataFrame, dict[str, T.Any], str) -> ConvNetState
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
@@ -361,7 +441,10 @@ def train_fine_tuning(df_train, df_valid, params, synthetic_path):
         tf.keras.metrics.Precision(name="precision"),
         tf.keras.metrics.Recall(name="recall"),
     ]
-    #model = create_fine_tunning_cnn(synthetic_path)
+
+    # lock layers for finetuning
+    for layer in model.layers[:-2]:
+        layer.trainable = False
     model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=tf_metrics)
 
     early_stop = tf.keras.callbacks.EarlyStopping(
@@ -386,6 +469,37 @@ def train_fine_tuning(df_train, df_valid, params, synthetic_path):
     return train_state
 
 
+#
+# evaluate
+#
+
+
+def evaluate_tuning( train_state, df_train, df_valid, df_test, params, batch_size=128 ):
+
+    model, _, _ = build_model_from_train_state(train_state)
+    ds_train    = build_dataset(df_train, params["image_shape"], batch_size=batch_size)
+    ds_valid    = build_dataset(df_valid, params["image_shape"], batch_size=batch_size)
+    ds_test     = build_dataset(df_test , params["image_shape"], batch_size=batch_size)
+
+    summary = {}
+    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
+    summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
+    summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
+    
+    # operation (train plus val)
+    df_operation = pd.concat([df_train, df_valid])
+    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=batch_size)
+    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
+    train_state.history['summary'] = summary
+
+    pprint(summary)
+    return train_state
+
+
+#
+# others
+#
+
 def evaluate_neural_net(df_eval, model_weights, params):
     # type: (pd.DataFrame, list, dict[str, T.Any]) -> dict[str, T.Any]
     ds_eval = build_dataset(
@@ -398,56 +512,6 @@ def evaluate_neural_net(df_eval, model_weights, params):
     metrics = report.calculate_metrics(ds_eval, df_eval, model)
 
     return metrics
-
-
-def save_train_state(output_path, train_state):
-    # type: (Path, ConvNetState) -> None
-    if not output_path.exists():
-        output_path.mkdir(parents=True)
-
-    filepaths = []
-
-    def _save_pickle(attribute_name) -> None:
-        path = output_path / f"{attribute_name}.pkl"
-        with open(path, "wb") as file:
-            pickle.dump(
-                getattr(train_state, attribute_name), file, pickle.HIGHEST_PROTOCOL
-            )
-        filepaths.append(path)
-
-    _save_pickle("model_weights")
-    _save_pickle("history")
-    _save_pickle("parameters")
-
-    # tar_path = output_path / f"{output_path.name}.tar.gz"
-    # with tarfile.open(tar_path, "w:gz") as tar:
-    #     for filepath in filepaths:
-    #         tar.add(filepath)
-
-    return None
-
-
-def save_job_state( path, dataset , train_state, job_params, task_params, dataset_info, hash_experiment, metadata={}):
-    
-    test = job_params['test']
-    sort = job_params['sort']
-
-    with open(path, 'wb') as file:
-
-        d = {
-            'weights'   : train_state.model_weights, 
-            'sequence'  : train_state.model_sequence,
-            'test'      : test,
-            'sort'      : sort,
-            'history'   : train_state.history,
-            'time'      : task_params['training_time'],
-            'hash'      : hash_experiment,
-            'metadata'  : metadata
-        }
-
-        pickle.dump(d, file, pickle.HIGHEST_PROTOCOL)
-
-
 
 
 def get_metrics_dict() -> dict[str, T.Any]:
@@ -481,27 +545,4 @@ def update_metrics_results(results, metrics):
 
     return metrics
 
-
-
-def evaluate_tuning( train_state, df_train, df_valid, df_test, params, batch_size=128 ):
-
-    model = build_model(train_state.model_sequence, train_state.model_weights)
-    ds_train = build_dataset(df_train, params["image_shape"], batch_size=batch_size)
-    ds_valid = build_dataset(df_valid, params["image_shape"], batch_size=batch_size)
-    ds_test  = build_dataset(df_test , params["image_shape"], batch_size=batch_size)
-
-
-    summary = {}
-    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
-    summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
-    summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
-    
-    # operation (train plus val)
-    df_operation = pd.concat([df_train, df_valid])
-    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=batch_size)
-    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
-    train_state.history['summary'] = summary
-
-    pprint(summary)
-    return train_state
 

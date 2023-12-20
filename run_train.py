@@ -3,13 +3,7 @@ import json
 import os, sys, traceback
 
 import luigi
-from pipelines.train import (
-    AltogetherPipeline,
-    BaselineFineTuningPipeline,
-    BaselinePipeline,
-    InterleavedPipeline,
-    SyntheticPipeline,
-)
+from pipelines.train import processes
 
 import tensorflow as tf 
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -72,17 +66,9 @@ if __name__ == "__main__":
         else:
             task_params["job"] = {}
 
-        processes = {
-            "baseline": BaselinePipeline,
-            "synthetic": SyntheticPipeline,
-            "interleaved": InterleavedPipeline,
-            "altogether": AltogetherPipeline,
-            "baseline_fine_tuning": BaselineFineTuningPipeline,
-        }
-
+        
         pipeline = [processes[args.process_name](**task_params)]
         luigi.build(pipeline, workers=1, local_scheduler=True)
-
         sys.exit(0)
 
     except  Exception as e:

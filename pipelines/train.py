@@ -127,3 +127,13 @@ class BaselineFineTuningPipeline(luigi.WrapperTask):
             grayscale=self.grayscale,
             job=self.job,
         )
+
+
+
+processes = {
+            "baseline"              : BaselinePipeline,
+            "synthetic"             : SyntheticPipeline,
+            "interleaved"           : InterleavedPipeline,
+            "altogether"            : AltogetherPipeline,
+            "baseline_fine_tuning"  : BaselineFineTuningPipeline,
+        }
