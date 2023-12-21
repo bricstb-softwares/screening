@@ -1,17 +1,15 @@
 {
-    "Manaus": {
-        "tag": "manaus", 
+    "SantaCasa": {
+        "tag": "imageamento_anonimizado_valid", 
         "sources": {
             "pix2pix": {
-                "tb": "user.otto.tavares.Manaus.manaus.pix2pix_v1.tb.r3.samples.csv",
-                "notb": "user.otto.tavares.Manaus.manaus.pix2pix_v1.notb.r3.samples.csv"
+                "notb": "user.otto.tavares.task.SantaCasa_imageamento_anonimizado_valid.pix2pix_v1_notb.r2.samples.csv"
             }, 
             "wgan": {
-                "tb": "user.joao.pinto.task.Manaus.manaus.wgan_v2_tb.r2.samples.csv",
-                "notb": "user.joao.pinto.task.Manaus.manaus.wgan_v2_notb.r2.samples.csv"
+                "notb": "user.joao.pinto.task.SantaCasa.imageamento_anonimizado_valid.wgan_v2_notb.r4.samples.csv"
             }, 
             "raw": {
-                "csv": "Manaus_manaus_table_from_raw.csv",
+                "csv": "SantaCasa_imageamento_anonimizado_valid_table_from_raw.csv", 
                 "pkl": "splits.pkl"
             }
         }

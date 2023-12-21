@@ -1,18 +1,18 @@
 {
+    "Manaus": {
+        "tag": "c_manaus",
+        "sources": {
+            "raw": {
+                "csv": "Manaus_c_manaus_table_from_raw.csv", 
+                "pkl": "splits.pkl"
+            }
+        }
+    }, 
     "Shenzhen": {
         "tag": "china", 
         "sources": {
             "raw": {
                 "csv": "Shenzhen_china_table_from_raw.csv", 
-                "pkl": "splits.pkl"
-            }
-        }
-    }, 
-    "Manaus": {
-        "tag": "manaus",
-        "sources": {
-            "raw": {
-                "csv": "Manaus_manaus_table_from_raw.csv", 
                 "pkl": "splits.pkl"
             }
         }

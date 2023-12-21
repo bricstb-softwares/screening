@@ -130,6 +130,17 @@ class BaselineFineTuningPipeline(luigi.WrapperTask):
 
 
 
+class TaskCnvPipeline(luigi.WrapperTask):
+    experiment_path = luigi.Parameter()
+    output_path     = luigi.Parameter()
+
+    def requires(self):
+        yield TaskCnv(
+            experiment_path = self.experiment_path, 
+            output_path     = self.output_path
+        )
+
+
 processes = {
             "baseline"              : BaselinePipeline,
             "synthetic"             : SyntheticPipeline,

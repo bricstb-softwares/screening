@@ -4,12 +4,8 @@ import os, sys, traceback
 
 import luigi
 from pipelines.train import processes
-
-import tensorflow as tf 
-physical_devices = tf.config.list_physical_devices('GPU')
-if len(physical_devices)>0:
-    tf.config.experimental.set_memory_growth(physical_devices[0], False)
-
+from pprint import pprint
+import collections
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -29,18 +25,6 @@ if __name__ == "__main__":
         default="hyperparameters.json",
     )
 
-    parser.add_argument(
-        "--jobs",
-        "-j",
-        help="Configuration JSON file.",
-        default=None,
-    )
-
-    parser.add_argument(
-        "--parent_task",
-        help="The parent task used for finetuning method. Only use this argument if you are in job mode.",
-        default=None,
-    )
 
     args = parser.parse_args()
 
@@ -49,7 +33,8 @@ if __name__ == "__main__":
 
         with open(args.dataset_info, "rt") as file:
             d_args = argparse.Namespace()
-            d_args.__dict__.update(json.load(file))
+            d = json.load(file)
+            d_args.__dict__.update(collections.OrderedDict(d))
 
         with open(args.hyperparameters, "rt") as file:
             h_args = argparse.Namespace()
@@ -57,17 +42,11 @@ if __name__ == "__main__":
 
         task_params = vars(h_args)
         task_params["dataset_info"] = vars(d_args)
-        if args.jobs:
-            with open(args.jobs, "r") as file:
-                job = json.load(file)
-                job['parent'] = args.parent_task
-                task_params["job"] = job
-        else:
-            task_params["job"] = {}
+        task_params["job"] = {}
 
-        
-        pipeline = [processes[args.process_name](**task_params)]
-        luigi.build(pipeline, workers=1, local_scheduler=True)
+
+        task = next(processes[args.process_name](**task_params).requires())
+        print(task.get_hash())
         sys.exit(0)
 
     except  Exception as e:

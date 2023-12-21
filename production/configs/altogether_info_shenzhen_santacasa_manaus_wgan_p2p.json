@@ -1,0 +1,52 @@
+{
+    "Manaus": {
+        "tag": "manaus", 
+        "sources": {
+            "pix2pix": {
+                "tb": "user.otto.tavares.Manaus.manaus.pix2pix_v1.tb.r3.samples.csv",
+                "notb": "user.otto.tavares.Manaus.manaus.pix2pix_v1.notb.r3.samples.csv"
+            }, 
+            "wgan": {
+                "tb": "user.joao.pinto.task.Manaus.manaus.wgan_v2_tb.r2.samples.csv",
+                "notb": "user.joao.pinto.task.Manaus.manaus.wgan_v2_notb.r2.samples.csv"
+            }, 
+            "raw": {
+                "csv": "Manaus_manaus_table_from_raw.csv",
+                "pkl": "splits.pkl"
+            }
+        }
+    },
+    "SantaCasa": {
+        "tag": "imageamento_anonimizado_valid", 
+        "sources": {
+            "pix2pix": {
+                "notb": "user.otto.tavares.task.SantaCasa_imageamento_anonimizado_valid.pix2pix_v1_notb.r2.samples.csv"
+            }, 
+            "wgan": {
+                "notb": "user.joao.pinto.task.SantaCasa.imageamento_anonimizado_valid.wgan_v2_notb.r4.samples.csv"
+            }, 
+            "raw": {
+                "csv": "SantaCasa_imageamento_anonimizado_valid_table_from_raw.csv", 
+                "pkl": "splits.pkl"
+            }
+        }
+    },
+        "Shenzhen": {
+            "tag": "china", 
+            "sources": {
+                "pix2pix": {
+                    "tb": "user.otto.tavares.task.Shenzhen_china.pix2pix.v1_tb.r1.samples.csv", 
+                    "notb": "user.otto.tavares.task.Shenzhen_china.pix2pix.v1_notb.r1.samples.csv"
+                }, 
+                "wgan": {
+                    "tb": "user.joao.pinto.task.Shenzhen_china.wgan.v2_tb.r1.samples.csv", 
+                    "notb": "user.joao.pinto.task.Shenzhen_china.wgan.v2_notb.r1.samples.csv"
+                },
+                "raw": {
+                    "csv": "Shenzhen_china_table_from_raw.csv", 
+                    "pkl": "splits.pkl"
+                }
+            }
+        }
+}
+
