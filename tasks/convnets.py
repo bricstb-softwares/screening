@@ -27,6 +27,9 @@ from utils.convnets import (
 )
 
 
+#
+# Base ConvNet class
+#
 class TrainCNN(Task):
 
     dataset_info  = luigi.DictParameter()
@@ -39,7 +42,76 @@ class TrainCNN(Task):
     job           = luigi.DictParameter(default={}, significant=False)
 
 
-    def log_params(self, dirname=''):
+  
+
+    def output(self) -> luigi.LocalTarget:
+        file_name = "output.pkl" if self.get_job_params() else "task_params.pkl"
+        output_file = Path(self.get_output_path()) / file_name
+        return luigi.LocalTarget(str(output_file))
+
+
+    def requires(self) -> list[CrossValidation]:
+        required_tasks = []
+        for dataset in self.dataset_info:
+            for source in self.dataset_info[dataset]["sources"]:
+                required_tasks.append(
+                    CrossValidation(
+                        dataset,
+                        self.dataset_info[dataset]["tag"],
+                        source,
+                        self.dataset_info[dataset]["sources"][source],
+                    )
+                )
+        return required_tasks
+
+    #
+    # Run task!
+    #
+    def run(self):
+        
+        task_params     = self.log_params()
+        logger.info(f"Running {self.get_task_family()}...")
+
+        tasks           = self.requires()
+        data            = self.get_data_samples(tasks)
+        job_params      = self.get_job_params()  
+
+        experiment_path = Path(self.get_output_path())
+
+        start = default_timer()
+
+        for test, sort in product(self.get_tests(), self.get_sorts()):
+
+            logger.info(f"Fold #{test} / Validation #{sort}")
+            train_state = self.fit( data, test, sort, task_params )
+
+            if job_params:
+                logger.info(f"Saving job state for test {test} and sort {sort} into {self.output().path}")
+                save_job_state( self.output().path,
+                        train_state, 
+                        job_params      = job_params, 
+                        task_params     = task_params,
+                        experiment_hash = self.get_hash(),
+                        experiment_type = self.get_task_family(),
+                    )
+            else:
+                output_path = experiment_path/f"cnn_fold{test}/sort{sort}/" 
+                save_train_state(output_path, train_state)
+
+        end = default_timer()
+
+        # output results
+        task_params["experiment_id"] = experiment_path.name
+        task_params["training_time"] = timedelta(seconds=(end - start))
+
+        if not job_params:
+            with open(self.output().path, "wb") as file:
+                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+
+
+    def log_params(self):
         self.set_logger()
 
         logger.info(f"=== Start '{self.__class__.__name__}' ===\n")
@@ -66,36 +138,13 @@ class TrainCNN(Task):
 
         return task_params
 
-    def requires(self) -> list[CrossValidation]:
-        required_tasks = []
-        for dataset in self.dataset_info:
-            for source in self.dataset_info[dataset]["sources"]:
-                required_tasks.append(
-                    CrossValidation(
-                        dataset,
-                        self.dataset_info[dataset]["tag"],
-                        source,
-                        self.dataset_info[dataset]["sources"][source],
-                    )
-                )
-        return required_tasks
-
-    def output(self) -> luigi.LocalTarget:
-        file_name = "output.pkl" if self.get_job_params() else "task_params.pkl"
-        output_file = Path(self.get_output_path()) / file_name
-        return luigi.LocalTarget(str(output_file))
-
-
-    #
-    # get data collection from all tasks
-    #
-    def get_data(self, tasks):
+    def get_data_samples(self, tasks, seed : int=42):
         data_list = []
         for task in tasks:
             if type(task) == CrossValidation:
                 data_list.append(pd.read_parquet(task.output().path))
         data = pd.concat(data_list)
-        data = data.sample(frac=1, random_state=42)
+        data = data.sample(frac=1, random_state=seed)
         return data
 
 
@@ -108,229 +157,93 @@ class TrainCNN(Task):
         return list(range(10)) if not job_params else [job_params['test']]
 
 
+#
+# Train methods
+#
 
 class TrainBaseline(TrainCNN):
-    def run(self):
-
-        task_params     = self.log_params()
-        logger.info(f"Running {self.get_task_family()}...")
-    
-        tasks           = self.requires()
-        data            = self.get_data(tasks)
-        job_params      = self.get_job_params()  
-        experiment_path = Path(self.get_output_path())
+  
+    def fit(self, data, test, sort, task_params ):
 
         start = default_timer()
-        for i, j in product(self.get_tests(), self.get_sorts()):
 
-            logger.info(f"Fold #{i} / Validation #{j}")
-            train_real  = split_dataframe(data, i, j, "train_real")
-            valid_real  = split_dataframe(data, i, j, "valid_real")
-            test_real   = split_dataframe(data, i, j, "test_real" )
-            train_state = train_neural_net(train_real, valid_real, task_params)
-            train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
+        train_real  = split_dataframe(data, test, sort, "train_real")
+        valid_real  = split_dataframe(data, test, sort, "valid_real")
+        test_real   = split_dataframe(data, test, sort, "test_real" )
 
-            if not job_params: # as task
-                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
-                save_train_state(output_path, train_state)
+        train_state = train_neural_net(train_real, valid_real, task_params)
+        train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
 
         end = default_timer()
+        train_state.timer = timedelta(seconds=(end - start))
+        return train_state
 
-        # output results
-        task_params["experiment_id"] = experiment_path.name
-        task_params["training_time"] = timedelta(seconds=(end - start))
-
-        if job_params: # as job
-            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
-            save_job_state( self.output().path,
-                            train_state, 
-                            job_params      = job_params, 
-                            task_params     = task_params,
-                            hash_experiment = self.get_hash() )
-
-        else: # as task
-            with open(self.output().path, "wb") as file:
-                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-        logger.info("")
-        logger.info(f" - Output: {self.get_output_path()}")
-        logger.info("")
-        logger.info(f"=== End: '{self.__class__.__name__}' ===")
-        logger.info("")
-
-
+       
 class TrainSynthetic(TrainCNN):
 
-    def run(self):
-
-        task_params     = self.log_params()
-        logger.info(f"Running {self.get_task_family()}...")
-    
-        tasks           = self.requires()
-        data            = self.get_data(tasks)
-        job_params      = self.get_job_params()  
-        experiment_path = Path(self.get_output_path())
+    def fit(self, data, test, sort, task_params ):
 
         start = default_timer()
-        for i, j in product(self.get_tests(), self.get_sorts()):
-            logger.info(f"Fold #{i} / Validation #{j}")
-            train_fake  = split_dataframe(data, i, j, "train_fake")
-            valid_real  = split_dataframe(data, i, j, "valid_real")
-            test_real   = split_dataframe(data, i, j, "test_real" )
-            train_state = train_neural_net(train_fake, valid_real, task_params)
-            train_state = evaluate_tuning(train_state, train_fake, valid_real, test_real, task_params)
 
-            if not job_params: # as task
-                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
-                save_train_state(output_path, train_state)
+        train_real  = split_dataframe(data, test, sort, "train_fake")
+        valid_real  = split_dataframe(data, test, sort, "valid_real")
+        test_real   = split_dataframe(data, test, sort, "test_real" )
+
+        train_state = train_neural_net(train_real, valid_real, task_params)
+        train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
 
         end = default_timer()
+        train_state.timer = timedelta(seconds=(end - start))
 
-        # output results
-        task_params["experiment_id"] = experiment_path.name
-        task_params["training_time"] = timedelta(seconds=(end - start))
-
-
-        if job_params: # as job
-            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
-            save_job_state( self.output().path, metadata,
-                            train_state, 
-                            job_params      = job_params, 
-                            task_params     = task_params,
-                            dataset_info    = self.dataset_info,
-                            hash_experiment = self.get_hash() )
-
-        else: # as task
-            with open(self.output().path, "wb") as file:
-                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-        logger.info("")
-        logger.info(f" - Output: {self.get_output_path()}")
-        logger.info("")
-        logger.info(f"=== End: '{self.__class__.__name__}' ===")
-        logger.info("")
+        return train_state
 
 
 class TrainInterleaved(TrainCNN):
 
-    def run(self):
-        task_params     = self.log_params()
-        logger.info(f"Running {self.get_task_family()}...")
-    
-        tasks           = self.requires()
-        data            = self.get_data(tasks)
-        job_params      = self.get_job_params()  
-        experiment_path = Path(self.get_output_path())
-        
-        # training loop
+    def fit(self, data, test, sort, task_params ):
         start = default_timer()
-        for i, j in product(self.get_tests(), self.get_sorts()):
-            logger.info(f"Fold #{i} / Validation #{j}")
-            train_fake = split_dataframe(data, i, j, "train_fake")
-            train_real = split_dataframe(data, i, j, "train_real")
-            valid_real = split_dataframe(data, i, j, "valid_real")
-            test_real  = split_dataframe(data, i, j, "test_real" )
 
-            train_state = train_interleaved(
-                train_real, train_fake, valid_real, task_params
-            )
-
-            train_real_fake = pd.concat([train_real, train_fake])
-            train_state = evaluate_tuning(train_state, train_real_fake, valid_real, test_real, task_params)
-
-            if not job_params: # as task
-                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
-                save_train_state(output_path, train_state)
-
+        train_fake = split_dataframe(data, i, j, "train_fake")
+        train_real = split_dataframe(data, i, j, "train_real")
+        valid_real = split_dataframe(data, i, j, "valid_real")
+        test_real  = split_dataframe(data, i, j, "test_real" )
+        train_state = train_interleaved(
+            train_real, train_fake, valid_real, task_params
+        )
+        train_real_fake = pd.concat([train_real, train_fake])
+        train_state = evaluate_tuning(train_state, train_real_fake, valid_real, test_real, task_params)
 
         end = default_timer()
+        train_state.timer = timedelta(seconds=(end - start))
 
-        task_params["experiment_id"] = experiment_path.name
-        task_params["training_time"] = timedelta(seconds=(end - start))
-        
-        if job_params: # as job
-            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
-            save_job_state( self.output().path, metadata,
-                            train_state, 
-                            job_params      = job_params, 
-                            task_params     = task_params,
-                            dataset_info    = self.dataset_info,
-                            hash_experiment = self.get_hash() )
-
-        else: # as task
-            with open(self.output().path, "wb") as file:
-                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+        return train_state
 
         
-        logger.info("")
-        logger.info(f" - Output: {self.get_output_path()}")
-        logger.info("")
-        logger.info(f"=== End: '{self.__class__.__name__}' ===")
-        logger.info("")
-
-
 class TrainAltogether(TrainCNN):
 
 
-    def run(self):
-        task_params     = self.log_params()
-        logger.info(f"Running {self.get_task_family()}...")
-    
-        task            = self.requires()
-        data            = self.get_data(tasks)
-        job_params      = self.get_job_params()  
-        experiment_path = Path(self.get_output_path())
-  
-        # training loop
+    def fit(self, data, test, sort, task_params ):
+
         start = default_timer()
-        for i, j in product(self.get_tests(), self.get_sorts()):
 
-            logger.info(f"Fold #{i} / Validation #{j}")
-            train_real = split_dataframe(data, i, j, "train_real")
-            train_fake = split_dataframe(data, i, j, "train_fake")
-            valid_real = split_dataframe(data, i, j, "valid_real")
-            test_real  = split_dataframe(data, i, j, "test_real" )
-
-            real_weights = (1 / len(train_real)) * np.ones(len(train_real))
-            fake_weights = (1 / len(train_fake)) * np.ones(len(train_fake))
-            weights = np.concatenate((real_weights, fake_weights))
-            weights = weights / sum(weights)
-
-            train_state = train_altogether(
-                train_real, train_fake, valid_real, weights, task_params
-            )
-
-            train_real_fake = pd.concat([train_real, train_fake])
-            train_state = evaluate_tuning(train_state, train_real_fake, valid_real, test_real, task_params)
-
-            if not job_params:
-                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
-                save_train_state(output_path, train_state)
-
+        train_real = split_dataframe(data, i, j, "train_real")
+        train_fake = split_dataframe(data, i, j, "train_fake")
+        valid_real = split_dataframe(data, i, j, "valid_real")
+        test_real  = split_dataframe(data, i, j, "test_real" )
+        real_weights = (1 / len(train_real)) * np.ones(len(train_real))
+        fake_weights = (1 / len(train_fake)) * np.ones(len(train_fake))
+        weights = np.concatenate((real_weights, fake_weights))
+        weights = weights / sum(weights)
+        train_state = train_altogether(
+            train_real, train_fake, valid_real, weights, task_params
+        )
+        train_real_fake = pd.concat([train_real, train_fake])
+        train_state = evaluate_tuning(train_state, train_real_fake, valid_real, test_real, task_params)
         end = default_timer()
+        train_state.timer = timedelta(seconds=(end - start))
 
-        task_params["experiment_id"] = experiment_path.name
-        task_params["training_time"] = timedelta(seconds=(end - start))
-        
-        if job_params: # as job
-            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
-            save_job_state( self.output().path, metadata,
-                            train_state, 
-                            job_params      = job_params, 
-                            task_params     = task_params,
-                            dataset_info    = self.dataset_info,
-                            hash_experiment = self.get_hash() )
-
-        else: # as single task
-            with open(self.output().path, "wb") as file:
-                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-        logger.info("")
-        logger.info(f" - Output: {self.get_output_path()}")
-        logger.info("")
-        logger.info(f"=== End: '{self.__class__.__name__}' ===")
-        logger.info("")
+        return train_state
+            
 
 
 class TrainBaselineFineTuning(TrainCNN):
@@ -347,10 +260,7 @@ class TrainBaselineFineTuning(TrainCNN):
             experiement_path= Path(tasks[0].get_output_path())
             model_path      = experiment_path / f"cnn_fold{test}/sort{sort}/"
             model, _, _     = build_model_from_train_state( model_path )
-
         return model
-
-
 
 
     def requires(self) -> list:
@@ -378,65 +288,25 @@ class TrainBaselineFineTuning(TrainCNN):
         return required_tasks
 
 
-    def run(self):
+    def fit(self, data, test, sort, task_params ):
         
-        task_params     = self.log_params()
-        logger.info(f"Running {self.get_task_family()}...")
-    
-        tasks           = self.requires()
-        data            = self.get_data(tasks)
-        job_params      = self.get_job_params()  
-        experiment_path = Path(self.get_output_path())
-
-        # training loop
         start = default_timer()
-        for i, j in product(self.get_tests(), self.get_sorts()):
-            logger.info(f"Fold #{i} / Validation #{j}")
-            train_fake = split_dataframe(data, i, j, "train_fake")
-            valid_real = split_dataframe(data, i, j, "valid_real")
-            test_real  = split_dataframe(data, i, j, "test_real" )
 
-            #
-            # get the model from base experiment
-            #
-            model      = self.get_parent_model(i,j)
+        train_fake = split_dataframe(data, test, sort, "train_fake")
+        valid_real = split_dataframe(data, test, sort, "valid_real")
+        test_real  = split_dataframe(data, test, sort, "test_real" )
+        model      = self.get_parent_model(test, sort)
 
-            train_state = train_fine_tuning(
-                train_fake, valid_real, test_real, task_params, model
-            )
-
-            train_state = evaluate_tuning(train_state, train_fake, valid_real, test_real, task_params)
-
-            if not job_params:
-                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
-                save_train_state(output_path, train_state)
+        train_state = train_fine_tuning(
+            train_fake, valid_real, test_real, task_params, model
+        )
+        train_state = evaluate_tuning(train_state, train_fake, valid_real, test_real, task_params)
 
         end = default_timer()
+        train_state.timer = timedelta(seconds=(end - start))
 
-        # output results
-        task_params["experiment_id"] = experiment_path.name
-        task_params["training_time"] = timedelta(seconds=(end - start))
-    
-        if job_params: # as job
-            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
-            save_job_state( self.output().path, metadata,
-                            train_state, 
-                            job_params      = job_params, 
-                            task_params     = task_params,
-                            dataset_info    = self.dataset_info,
-                            hash_experiment = self.get_hash() )
-
-        else: # as single task
-            with open(self.output().path, "wb") as file:
-                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-        
-
-        logger.info("")
-        logger.info(f" - Output: {self.get_output_path()}")
-        logger.info("")
-        logger.info(f"=== End: '{self.__class__.__name__}' ===")
-        logger.info("")
+        return train_state
+       
 
 
 class TrainFineTuning(TrainCNN):
@@ -473,62 +343,21 @@ class TrainFineTuning(TrainCNN):
         return required_tasks
 
 
-    def run(self):
-
-        task_params     = self.log_params()
-        logger.info(f"Running {self.get_task_family()}...")
-
-        tasks           = self.requires()
-        data            = self.get_data(tasks)
-        experiment_path = Path(self.get_output_path())
-        job_params      = self.get_job_params()  
+    def fit(self, data, test, sort, task_params ):
         
-        # training loop
         start = default_timer()
-        for i, j in product(self.get_tests(), self.get_sorts()):
-            logger.info(f"Fold #{i} / Validation #{j}")
-            train_real = split_dataframe(data, i, j, "train_real")
-            valid_real = split_dataframe(data, i, j, "valid_real")
-            test_real  = split_dataframe(data, i, j, "test_real" )
 
-            #
-            # get the model from base experiment
-            #
-            model      = self.get_parent_model(i,j)
-                        
-            train_state = train_fine_tuning(
-                        train_real, valid_real, task_params, model
-                    )
-
-            train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
-
-            if not job_params:
-                output_path = experiment_path/f"cnn_fold{i}/sort{j}/" 
-                save_train_state(output_path, train_state)
-
+        train_real = split_dataframe(data, i, j, "train_real")
+        valid_real = split_dataframe(data, i, j, "valid_real")
+        test_real  = split_dataframe(data, i, j, "test_real" )
+        model      = self.get_parent_model(i,j)
+                    
+        train_state = train_fine_tuning(
+                    train_real, valid_real, task_params, model
+                )
+        train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
+       
         end = default_timer()
+        train_state.timer = timedelta(seconds=(end - start))
 
-        # output results
-        task_params["experiment_id"] = experiment_path.name
-        task_params["training_time"] = timedelta(seconds=(end - start))
-
-        if job_params: # as job
-            logger.info(f"Saving job state for test {i} and sort {j} into {self.output().path}")
-            save_job_state( self.output().path, metadata,
-                            train_state, 
-                            job_params      = job_params, 
-                            task_params     = task_params,
-                            dataset_info    = self.dataset_info,
-                            hash_experiment = self.get_hash() )
-
-        else: # as single task
-            with open(self.output().path, "wb") as file:
-                pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-        
-
-        logger.info("")
-        logger.info(f" - Output: {self.get_output_path()}")
-        logger.info("")
-        logger.info(f"=== End: '{self.__class__.__name__}' ===")
-        logger.info("")
+        return train_state

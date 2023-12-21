@@ -21,12 +21,22 @@ from utils.convnets import (
     split_dataframe,
     build_model_from_train_state,
     prepare_model
-
 )
 
 
 
-class MyTask(LuigiTask):
+class ConverterPipeline(luigi.WrapperTask):
+    experiment_path = luigi.Parameter()
+    output_path     = luigi.Parameter()
+
+    def requires(self):
+        yield Converter(
+            experiment_path = self.experiment_path, 
+            output_path     = self.output_path
+        )
+
+
+class Converter(LuigiTask):
 
     experiment_path   = luigi.Parameter()
     output_path       = luigi.Parameter()
@@ -91,9 +101,6 @@ class MyTask(LuigiTask):
         task_params = self.get_task_params_from(self.experiment_path)
 
 
-
-class Baseline(MyTask):
-
     def run(self):
 
         self.set_logger()
@@ -102,10 +109,12 @@ class Baseline(MyTask):
         # reading all parameters from the current task
         task_params     = self.get_task_params_from( self.experiment_path )
         # get training control tags
-        experiment_type = task_params['experiment_id'].split('_')[0]
+        experiment_type = task_params['experiment_id'].split('_')[0].lower().replace('train','')
         experiment_hash = task_params['experiment_id'].split('_')[1]
 
-        pprint(task_params)
+        logger.info(f"Converting experiment with hash {experiment_hash}")
+
+
         # load the dataset
         tasks           = self.requires()
         # get the data
@@ -121,13 +130,26 @@ class Baseline(MyTask):
                 continue
             
             logger.info(f"Converting Fold #{i} / Validation #{j}...")
-            train_real  = split_dataframe(data, i, j, "train_real")
-            valid_real  = split_dataframe(data, i, j, "valid_real")
-            test_real   = split_dataframe(data, i, j, "test_real" )
+
+            logger.info(f"Experiment type is {experiment_type}")
+
+            if experiment_type in ['baseline', 'finetuning']:
+                train_df  = split_dataframe(data, i, j, "train_real")
+            elif experiment_type in ['synthetic', 'baselinefinetuning']:
+                train_df  = split_dataframe(data, i, j, "train_fake")
+            elif experiment_type in ['interleaved', 'altogether']:
+                train_real = split_dataframe(data, i, j, "train_real")
+                train_fake = split_dataframe(data, i, j, "train_fake")
+                train_df = pd.concat([train_real, train_fake])
+            else:
+                RuntimeError(f"Experiment ({experiment_type}) type not implemented")
+
+            valid_df  = split_dataframe(data, i, j, "valid_real")
+            test_df   = split_dataframe(data, i, j, "test_real" )
 
             # get train state
             train_state = self.get_train_state_from(i,j)
-            train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
+            train_state = evaluate_tuning(train_state, train_df, valid_df, test_df, task_params)
        
             logger.info(f"Saving job state for test {i} and sort {j} into {job_path}")
             save_job_state( job_path,
