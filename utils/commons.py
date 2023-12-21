@@ -1,5 +1,5 @@
 import os, sys
-import logging
+import luigi, hashlib, six
 from loguru import logger
 from datetime import datetime
 
@@ -20,3 +20,10 @@ def set_task_logger(log_prefix, log_path):
 
 def create_folder(path):
     os.makedirs(path, exist_ok=True)
+
+
+def sort_dict(item: dict):
+    return {k: sort_dict(v) if isinstance(v, dict) else v for k, v in sorted(item.items())}
+
+
+

@@ -4,6 +4,7 @@ import os
 import pickle
 import json
 import typing as T
+import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
@@ -156,21 +157,23 @@ def create_cnn(image_shape):
     model.add(layers.Dense(units=128, activation="relu"))
     model.add(layers.Dense(units=1, activation="sigmoid"))
 
-    model.summary()
+    #model.summary()
     return model
 
 
 
 @dataclass
 class ConvNetState:
-    model_sequence: dict 
-    model_weights: list
-    history: dict[str, list]
-    parameters: dict
+    model_sequence  : dict 
+    model_weights   : list
+    history         : dict[str, list]
+    parameters      : dict
+    time            : datetime.timedelta
+    
 
 def prepare_model(model, history, params):
     # type: (tf.python.keras.models.Sequential, dict, dict) -> ConvNetState
-    train_state = ConvNetState(json.loads(model.to_json()), model.get_weights(), history, params)
+    train_state = ConvNetState(json.loads(model.to_json()), model.get_weights(), history, params, 0)
     return train_state
 
 
@@ -216,10 +219,7 @@ def save_job_state( path            : str,
     
     test = job_params['test']
     sort = job_params['sort']
-
-    with open(path, 'wb') as file:
-
-        d = {
+    d = {
             'model': {
                 'weights'   : train_state.model_weights, 
                 'sequence'  : train_state.model_sequence,
@@ -227,7 +227,7 @@ def save_job_state( path            : str,
             },
             'test'        : test,
             'sort'        : sort,
-            'time'        : task_params['training_time'],
+            'time'        : train_state.timer,
             'hash'        : experiment_hash,
             'type'        : experiment_type,   
             'metadata'    : metadata,
@@ -235,6 +235,7 @@ def save_job_state( path            : str,
             '__version__' : 1
         }
 
+    with open(path, 'wb') as file:
         pickle.dump(d, file, pickle.HIGHEST_PROTOCOL)
 
 
@@ -492,7 +493,7 @@ def evaluate_tuning( train_state, df_train, df_valid, df_test, params, batch_siz
     summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
     train_state.history['summary'] = summary
 
-    pprint(summary)
+    pprint(summary.keys())
     return train_state
 
 
