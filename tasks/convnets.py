@@ -157,6 +157,22 @@ class TrainCNN(Task):
         return list(range(10)) if not job_params else [job_params['test']]
 
 
+
+    #
+    # validation step
+    #
+    def evaluate( self, train_state, train_data, valid_data, test_data):
+
+        decorators = [
+                        Summary( key = 'summary', detailed=True ),
+                    ]
+
+        for decor in decorators:
+            decor( train_state, train_data, valid_data, test_data )
+
+        return train_state
+
+
 #
 # Train methods
 #
@@ -172,11 +188,10 @@ class TrainBaseline(TrainCNN):
         test_real   = split_dataframe(data, test, sort, "test_real" )
 
         train_state = train_neural_net(train_real, valid_real, task_params)
-        train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
+        train_state = self.evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
-        train_state.timer = timedelta(seconds=(end - start))
-        return train_state
+        return train_state, timedelta(seconds=(end - start))
 
        
 class TrainSynthetic(TrainCNN):
@@ -185,17 +200,15 @@ class TrainSynthetic(TrainCNN):
 
         start = default_timer()
 
-        train_real  = split_dataframe(data, test, sort, "train_fake")
+        train_fake  = split_dataframe(data, test, sort, "train_fake")
         valid_real  = split_dataframe(data, test, sort, "valid_real")
         test_real   = split_dataframe(data, test, sort, "test_real" )
 
-        train_state = train_neural_net(train_real, valid_real, task_params)
-        train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
+        train_state = train_neural_net(train_fake, valid_real, task_params)
+        train_state = self.evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
-        train_state.timer = timedelta(seconds=(end - start))
-
-        return train_state
+        return train_state, timedelta(seconds=(end - start))
 
 
 class TrainInterleaved(TrainCNN):
@@ -211,13 +224,10 @@ class TrainInterleaved(TrainCNN):
             train_real, train_fake, valid_real, task_params
         )
         train_real_fake = pd.concat([train_real, train_fake])
-        train_state = evaluate_tuning(train_state, train_real_fake, valid_real, test_real, task_params)
+        train_state = self.evaluate( train_state, train_real_fake, valid_real, test_real)
 
         end = default_timer()
-        train_state.timer = timedelta(seconds=(end - start))
-
-        return train_state
-
+        return train_state, timedelta(seconds=(end - start))
         
 class TrainAltogether(TrainCNN):
 
@@ -238,11 +248,10 @@ class TrainAltogether(TrainCNN):
             train_real, train_fake, valid_real, weights, task_params
         )
         train_real_fake = pd.concat([train_real, train_fake])
-        train_state = evaluate_tuning(train_state, train_real_fake, valid_real, test_real, task_params)
-        end = default_timer()
-        train_state.timer = timedelta(seconds=(end - start))
+        train_state = self.evaluate( train_state, train_real_fake, valid_real, test_real)
 
-        return train_state
+        end = default_timer()
+        return train_state, timedelta(seconds=(end - start))
             
 
 
@@ -300,12 +309,10 @@ class TrainBaselineFineTuning(TrainCNN):
         train_state = train_fine_tuning(
             train_fake, valid_real, test_real, task_params, model
         )
-        train_state = evaluate_tuning(train_state, train_fake, valid_real, test_real, task_params)
+        train_state = self.evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
-        train_state.timer = timedelta(seconds=(end - start))
-
-        return train_state
+        return train_state, timedelta(seconds=(end - start))
        
 
 
@@ -355,13 +362,10 @@ class TrainFineTuning(TrainCNN):
         train_state = train_fine_tuning(
                     train_real, valid_real, task_params, model
                 )
-        train_state = evaluate_tuning(train_state, train_real, valid_real, test_real, task_params)
-       
+        train_state = self.evaluate( train_state, train_real, valid_real, test_real)
+
         end = default_timer()
-        train_state.timer = timedelta(seconds=(end - start))
-
-        return train_state
-
+        return train_state, timedelta(seconds=(end - start))
 
 
 

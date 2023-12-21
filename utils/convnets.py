@@ -475,26 +475,6 @@ def train_fine_tuning(df_train, df_valid, params, model):
 #
 
 
-def evaluate_tuning( train_state, df_train, df_valid, df_test, params, batch_size=128 ):
-
-    model, _, _ = build_model_from_train_state(train_state)
-    ds_train    = build_dataset(df_train, params["image_shape"], batch_size=batch_size)
-    ds_valid    = build_dataset(df_valid, params["image_shape"], batch_size=batch_size)
-    ds_test     = build_dataset(df_test , params["image_shape"], batch_size=batch_size)
-
-    summary = {}
-    summary.update( report.calculate_metrics(ds_train, df_train, model , label='' ) )
-    summary.update( report.calculate_metrics(ds_valid, df_valid, model , label='_val' ) )
-    summary.update( report.calculate_metrics(ds_test , df_test , model , label='_test' ) )
-    
-    # operation (train plus val)
-    df_operation = pd.concat([df_train, df_valid])
-    ds_operation = build_dataset(df_operation, params["image_shape"], batch_size=batch_size)
-    summary.update( report.calculate_metrics(ds_operation, df_operation, model , label='_op' ) )
-    train_state.history['summary'] = summary
-
-    pprint(summary.keys())
-    return train_state
 
 
 #
