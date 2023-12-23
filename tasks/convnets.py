@@ -23,9 +23,9 @@ from utils.convnets import (
     train_fine_tuning,
     train_interleaved,
     train_neural_net,
-    evaluate_tuning,
 )
 
+import validation
 
 #
 # Base ConvNet class
@@ -158,19 +158,6 @@ class TrainCNN(Task):
 
 
 
-    #
-    # validation step
-    #
-    def evaluate( self, train_state, train_data, valid_data, test_data):
-
-        decorators = [
-                        Summary( key = 'summary', detailed=True ),
-                    ]
-
-        for decor in decorators:
-            decor( train_state, train_data, valid_data, test_data )
-
-        return train_state
 
 
 #
@@ -188,7 +175,7 @@ class TrainBaseline(TrainCNN):
         test_real   = split_dataframe(data, test, sort, "test_real" )
 
         train_state = train_neural_net(train_real, valid_real, task_params)
-        train_state = self.evaluate( train_state, train_real, valid_real, test_real)
+        train_state = validation.evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
         return train_state, timedelta(seconds=(end - start))
@@ -205,7 +192,7 @@ class TrainSynthetic(TrainCNN):
         test_real   = split_dataframe(data, test, sort, "test_real" )
 
         train_state = train_neural_net(train_fake, valid_real, task_params)
-        train_state = self.evaluate( train_state, train_fake, valid_real, test_real)
+        train_state = validation.evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
         return train_state, timedelta(seconds=(end - start))
@@ -224,7 +211,7 @@ class TrainInterleaved(TrainCNN):
             train_real, train_fake, valid_real, task_params
         )
         train_real_fake = pd.concat([train_real, train_fake])
-        train_state = self.evaluate( train_state, train_real_fake, valid_real, test_real)
+        train_state = validation.evaluate( train_state, train_real_fake, valid_real, test_real)
 
         end = default_timer()
         return train_state, timedelta(seconds=(end - start))
@@ -248,7 +235,7 @@ class TrainAltogether(TrainCNN):
             train_real, train_fake, valid_real, weights, task_params
         )
         train_real_fake = pd.concat([train_real, train_fake])
-        train_state = self.evaluate( train_state, train_real_fake, valid_real, test_real)
+        train_state = validation.evaluate( train_state, train_real_fake, valid_real, test_real)
 
         end = default_timer()
         return train_state, timedelta(seconds=(end - start))
@@ -309,7 +296,7 @@ class TrainBaselineFineTuning(TrainCNN):
         train_state = train_fine_tuning(
             train_fake, valid_real, test_real, task_params, model
         )
-        train_state = self.evaluate( train_state, train_fake, valid_real, test_real)
+        train_state = validation.evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
         return train_state, timedelta(seconds=(end - start))
@@ -362,7 +349,7 @@ class TrainFineTuning(TrainCNN):
         train_state = train_fine_tuning(
                     train_real, valid_real, task_params, model
                 )
-        train_state = self.evaluate( train_state, train_real, valid_real, test_real)
+        train_state = validation.evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
         return train_state, timedelta(seconds=(end - start))
