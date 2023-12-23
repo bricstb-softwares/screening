@@ -118,9 +118,8 @@ def cross_validation(
 
 
 #
+# prepare real data
 #
-#
-
 def prepare_real(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
      path = data_dir / f"{dataset}/{tag}/raw"
@@ -168,7 +167,9 @@ def prepare_real(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd
      return pd.concat(metadata_list)
 
 
-
+#
+# prepare p2p
+#
 def prepare_p2p(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
     path = data_dir / f"{dataset}/{tag}/fake_images"
@@ -196,6 +197,9 @@ def prepare_p2p(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.
     return pd.concat(metadata_list)
 
 
+#
+# prepare wgan data
+#
 def prepare_wgan(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
     path = data_dir / f"{dataset}/{tag}/fake_images"
@@ -224,6 +228,9 @@ def prepare_wgan(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd
     return pd.concat([data_train, data_valid])
 
 
+#
+# prepare cycle data
+#
 def prepare_cycle(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
     path = data_dir / f"{dataset}/{tag}/fake_images"
@@ -251,7 +258,19 @@ def prepare_cycle(data_dir : str, dataset : str, tag : str, metadata: dict) -> p
     return pd.concat(metadata_list)
 
 
+#
+# prepare 
+#
+def prepare_data( source : str, data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
-
-
+    if source == "raw":
+        data = prepare_real(data_dir, dataset, tag, metadata)
+    elif source == "pix2pix":
+        data = prepare_p2p(data_dir, dataset, tag, metadata)
+    elif source == "wgan":
+        data = prepare_wgan(data_dir, dataset, tag, metadata)
+    elif source == "cycle":
+        data = prepare_cycle(data_dir, dataset, tag, metadata)
+    else:
+        raise KeyError(f"Source '{source}' is not defined.")
 
