@@ -1,16 +1,20 @@
 
 
-import utils.convnets
-
+import utils.convnets as convnets
+import collections
+import pandas as pd
+import numpy as np
 from loguru import logger
+from sklearn.metrics import auc, confusion_matrix, roc_curve
 
 
 
-def evaluate( train_state, data_train, data_valid, data_test ):
+
+def evaluate( train_state, train_data, valid_data, test_data ):
 
     decorators = [
                     Summary( key = 'summary', detailed=True ),
-                    OWS( key = "who" , min_sensitivity = , min_specificity = , detailed=True)
+                    OWS( key = "who" , min_sensitivity = 0.9, min_specificity = 0.7, detailed=True)
                 ]
     for decor in decorators:
         decor( train_state, train_data, valid_data, test_data )
@@ -20,7 +24,7 @@ def evaluate( train_state, data_train, data_valid, data_test ):
 
 class Summary:
 
-    def __init__(self, key, batch_size=128, detailed=False):
+    def __init__(self, key, batch_size=32, detailed=False):
         self.key = key
         self.batch_size=batch_size
         self.detailed = detailed
@@ -30,65 +34,95 @@ class Summary:
 
         model, history, params = convnets.build_model_from_train_state(train_state)
 
-        d = collections.OrderedDict()
+        d            = collections.OrderedDict()
+
+        op_data      = pd.concat([train_data, valid_data])
 
         ds_train     = convnets.build_dataset(train_data, params["image_shape"], batch_size=self.batch_size)
         ds_valid     = convnets.build_dataset(valid_data, params["image_shape"], batch_size=self.batch_size)
         ds_test      = convnets.build_dataset(test_data , params["image_shape"], batch_size=self.batch_size)
-        ds_operation = convnets.build_dataset(pd.concat([train_data, df_valid_data]), params["image_shape"], batch_size=self.batch_size)
+        ds_operation = convnets.build_dataset(op_data   , params["image_shape"], batch_size=self.batch_size)
+
+        # set threshold by validation set
+        metrics_val  , threshold = self.calculate( ds_valid    , valid_data    , model , label="_val" )
+        metrics_train, _         = self.calculate( ds_train    , train_data    , model , threshold=threshold )              
+        metrics_test , _         = self.calculate( ds_test     , test_data     , model , label="_test", threshold=threshold ) 
+        metrics_op   , _         = self.calculate( ds_operation, op_data       , model , label="_op" , threshold=threshold )
 
 
-        d.update( self.calculate( ds_train    , train_data    , model                ) )
-        d.update( self.calculate( ds_valid    , valid_data    , model , label="_val" ) )
-        d.update( self.calculate( ds_test     , test_data     , model , label="_test") )
-        d.update( self.calculate( ds_operation, operation_data, model , label="_op"  ) )
+        for metrics in [metrics_val, metrics_train, metrics_test, metrics_op]:
+            d.update(metrics)
+
 
         train_state.history[self.key] = d
 
         logger.info( "Train     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max']*100     , d['sensitivity']*100     , d['specificity']*100, d['auc']))
         logger.info( "Valid     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_val']*100 , d['sensitivity_val']*100 , d['specificity_val']*100, d['auc_val']))
-        logger.info( "Test      : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_test']*100, d['sensitivity_test']*100, d['specificity_test']*100, d['auc']))
-        logger.info( "Operation : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_op']*100  , d['sensitivity_op']*100  , d['specificity_test']*100, d['auc']))
+        logger.info( "Test      : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_test']*100, d['sensitivity_test']*100, d['specificity_test']*100, d['auc_test']))
+        logger.info( "Operation : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_op']*100  , d['sensitivity_op']*100  , d['specificity_op']*100, d['auc_op']))
 
         return train_state
 
 
 
-    def calculate( ds, df, model, label=''):
+    def calculate( self, ds, df, model, label='', threshold=None):
 
         metrics = collections.OrderedDict({})
 
-        y_true = df["label"].values.astype(int)
-        y_prob = model.predict(ds).squeeze()
+        y_true  = df["label"].values.astype(int)
+        y_prob  = model.predict(ds).squeeze()
     
         # get roc curve
         fpr, tpr, thresholds = roc_curve(y_true, y_prob)
-   
         # calculate the total SP & AUC
         sp_values = np.sqrt(np.sqrt(tpr * (1 - fpr)) * (0.5 * (tpr + (1 - fpr))))
         knee      = np.argmax(sp_values)
-        threshold = thresholds[knee]
-        y_pred    = (y_prob >= threshold).astype(int)
+        thr       = thresholds[knee] if not threshold else threshold
+        y_pred    = (y_prob >= thr).astype(int)
 
         # confusion matrix and metrics
         conf_matrix                  = confusion_matrix(y_true, y_pred)
         tn, fp, fn, tp               = conf_matrix.ravel()
-        metrics["sensitivity"+label] = tp / (tp + fn)
-        metrics["specificity"+label] = tn / (tn + fp)
-        metrics["precision"+label]   = tp / (tp + fp)
-        metrics["recall"+label]      = tp / (tp + fn)
+        fa = fp / (tn + fp)
+        det = tp / (tp + fn) # same as recall or sensibility
+
+        # given the threshold
+        metrics['threshold'+label]      = thr
+        metrics["sp_index"+label]       = np.sqrt(np.sqrt(det * (1 - fa)) * (0.5 * (det + (1 - fa))))
+        metrics['fa'+label]             = fa
+        metrics["sensitivity"+label]    = tp / (tp + fn) # same as recall
+        metrics["specificity"+label]    = tn / (tn + fp) 
+        metrics["precision"+label]      = tp / (tp + fp) 
+        metrics["recall"+label]         = tp / (tp + fn) # same as sensibility
+        metrics["acc"+label]            = (tp+tn)/(tp+tn+fp+fn) # accuracy
+        metrics["true_negative"+label]  = tn
+        metrics["true_positive"+label]  = tp
+        metrics["false_negative"+label] = fn
+        metrics["false_positive"+label] = fp
+
+        # given the roc
         metrics["sp_max" +label]     = sp_values[knee]
         metrics["auc"    +label]     = auc(fpr, tpr)
-        metrics['threshold'+label]   = threshold
-          
-        return metrics
+        metrics["roc"    +label]     = {"fpr":fpr, "tpr":tpr, "thresholds":thresholds}
+
+        if self.detailed:
+            # calculate predictions
+            d = {
+                "image_name" : df["path"].apply(lambda x: x.split("/")[-1].split(".")[0]),
+                "y_prob"     : y_prob,
+                "y_pred"     : y_pred,
+            }
+            metrics["predictions"] = pd.DataFrame.from_dict(d)
+     
+  
+        return metrics, thr
 
 
 
 
 class OWS:
 
-    def __init__(self, key, batch_size=128, mim_sensibility=0.9, min_specificity=0.7, detailed=False):
+    def __init__(self, key, batch_size=32, min_sensitivity=0.9, min_specificity=0.7, detailed=False):
         self.key = key
         self.batch_size=batch_size
         self.detailed = detailed
@@ -101,31 +135,44 @@ class OWS:
         model, history, params = convnets.build_model_from_train_state(train_state)
 
         d            = collections.OrderedDict()
+        op_data      = pd.concat([train_data, valid_data])
+
         ds_train     = convnets.build_dataset(train_data, params["image_shape"], batch_size=self.batch_size)
         ds_valid     = convnets.build_dataset(valid_data, params["image_shape"], batch_size=self.batch_size)
         ds_test      = convnets.build_dataset(test_data , params["image_shape"], batch_size=self.batch_size)
-        ds_operation = convnets.build_dataset(pd.concat([train_data, df_valid_data]), params["image_shape"], batch_size=self.batch_size)
+        ds_operation = convnets.build_dataset(op_data   , params["image_shape"], batch_size=self.batch_size)
 
-        d.update( self.calculate( ds_train    , train_data    , model                ) )
-        d.update( self.calculate( ds_valid    , valid_data    , model , label="_val" ) )
-        d.update( self.calculate( ds_test     , test_data     , model , label="_test") )
-        d.update( self.calculate( ds_operation, operation_data, model , label="_op"  ) )
-
-        train_state.history[self.key] = d
+        # set threshold by validation set
+        metrics_val  , threshold = self.calculate( ds_valid    , valid_data    , model , label="_val" )
 
 
-        if d['who_area']:
-            logger.info( "Training inside OWS area...")
-            logger.info( "Train     (OWS) : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max']*100     , d['sensitivity']*100     , d['specificity']*100, d['auc']))
-            logger.info( "Valid     (OWS) : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_val']*100 , d['sensitivity_val']*100 , d['specificity_val']*100, d['auc_val']))
-            logger.info( "Test      (OWS) : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_test']*100, d['sensitivity_test']*100, d['specificity_test']*100, d['auc']))
-            logger.info( "Operation (OWS) : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_op']*100  , d['sensitivity_op']*100  , d['specificity_test']*100, d['auc']))
-        
+
+
+        if threshold: # if threshold is not none, we have a cut higher than OWS roc curve area
+            metrics_train, _         = self.calculate( ds_train    , train_data    , model , threshold=threshold ) 
+            metrics_test , _         = self.calculate( ds_test     , test_data     , model , label="_test", threshold=threshold ) 
+            metrics_op   , _         = self.calculate( ds_operation, op_data       , model , label="_op" , threshold=threshold )
+
+            # update everything
+            for metrics in [metrics_val, metrics_train, metrics_test, metrics_op]:
+                d.update(metrics)
+
+
+        train_state.history[self.key] = d # if not OWS area, this d will be empty ({})
+
+        if d:
+            logger.info( "Train     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max']*100     , d['sensitivity']*100     , d['specificity']*100, d['auc']))
+            logger.info( "Valid     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_val']*100 , d['sensitivity_val']*100 , d['specificity_val']*100, d['auc_val']))
+            logger.info( "Test      : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_test']*100, d['sensitivity_test']*100, d['specificity_test']*100, d['auc_test']))
+            logger.info( "Operation : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_op']*100  , d['sensitivity_op']*100  , d['specificity_op']*100, d['auc_op']))
+        else:
+            logger.info("Not inside of OWS roc curve area...")
+
         return train_state
 
 
 
-    def calculate( metrics , ds, df, model, label=''):
+    def calculate( self, ds, df, model, label='', threshold=None):
 
         metrics = collections.OrderedDict({})
 
@@ -135,42 +182,59 @@ class OWS:
         # get roc curve
         fpr, tpr, thresholds = roc_curve(y_true, y_prob)
         sp_values = np.sqrt(np.sqrt(tpr * (1 - fpr)) * (0.5 * (tpr + (1 - fpr))))
+        knee      = np.argmax(sp_values)
+        sp_max    = sp_values[knee]
+        thr       = None
 
-        # calculate metrics inside the WHO area
-        who_selection = (tpr >= self.min_sensitivity) & ((1 - fpr) >= self.min_specificity)
+        if not threshold:
+            # calculate metrics inside the WHO area
+            who_selection = (tpr >= self.min_sensitivity) & ((1 - fpr) >= self.min_specificity)
 
-        metrics['who_area'] = False
+            if np.any(who_selection):
+                sp_values = sp_values[who_selection]
+                sp_argmax = np.argmax(sp_values)
+                thr       = thresholds[sp_argmax]
+        else:
+            thr = threshold
 
-        if np.any(who_selection):
+        if thr:
 
-            metrics['who_area'] = True
-            sp_values = sp_values[who_selection]
-            sp_argmax = np.argmax(sp_values)
-            threshold = thresholds[sp_argmax]
-            y_pred    = (y_prob >= threshold).astype(int)
-
+            y_pred    = (y_prob >= thr).astype(int)
             # confusion matrix and metrics
             conf_matrix                  = confusion_matrix(y_true, y_pred)
             tn, fp, fn, tp               = conf_matrix.ravel()
-            metrics["sensitivity"+label] = tp / (tp + fn)
-            metrics["specificity"+label] = tn / (tn + fp)
-            metrics["precision"+label]   = tp / (tp + fp)
-            metrics["recall"+label]      = tp / (tp + fn)
-            metrics["sp_max" +label]     = sp_values[sp_argmax]
-            metrics["auc"    +label]     = auc(fpr, tpr)
-            metrics['threshold'+label]   = threshold
-       
+            fa = fp / (tn + fp)
+            det = tp / (tp + fn) # same as recall or sensibility
 
-    
-        if self.detailed:
-            # calculate predictions
-            aux_metrics["image_name"] = df["path"].apply(
-                lambda x: x.split("/")[-1].split(".")[0]
-            )
-            aux_metrics["y_prob"] = y_prob
-            aux_metrics["y_pred"] = y_pred
-            metrics["predictions"] = pd.DataFrame.from_dict(aux_metrics)
-            metrics["fpr"+label] = fpr
-            metrics["tpr"+label] = tpr
+            # given the threshold
+            metrics['threshold'+label]      = thr
+            metrics["sp_index"+label]       = np.sqrt(np.sqrt(det * (1 - fa)) * (0.5 * (det + (1 - fa))))
+            metrics['fa'+label]             = fa
+            metrics["sensitivity"+label]    = tp / (tp + fn) # same as recall
+            metrics["specificity"+label]    = tn / (tn + fp) 
+            metrics["precision"+label]      = tp / (tp + fp) 
+            metrics["recall"+label]         = tp / (tp + fn) # same as sensibility
+            metrics["acc"+label]            = (tp+tn)/(tp+tn+fp+fn) # accuracy
+            metrics["true_negative"+label]  = tn
+            metrics["true_positive"+label]  = tp
+            metrics["false_negative"+label] = fn
+            metrics["false_positive"+label] = fp
+
+            # given the roc
+            metrics["sp_max" +label]     = sp_max
+            metrics["auc"    +label]     = auc(fpr, tpr)
+            metrics["roc"    +label]     = {"fpr":fpr, "tpr":tpr, "thresholds":thresholds}
+
+
+            if self.detailed:
+                # calculate predictions
+                d = {
+                    "image_name" : df["path"].apply(lambda x: x.split("/")[-1].split(".")[0]),
+                    "y_prob"     : y_prob,
+                    "y_pred"     : y_pred,
+                }
+                metrics["predictions"] = pd.DataFrame.from_dict(d)
+     
+       
   
-        return metrics
+        return metrics, thr

@@ -211,14 +211,10 @@ def save_train_state(output_path : str, train_state : str, tar : bool=False):
 # as job
 def save_job_state( path            : str, 
                     train_state     : ConvNetState, 
-                    job_params      : dict, 
-                    task_params     : dict, 
-                    experiment_hash : str, 
-                    experiment_type : str, 
+                    test            : int,
+                    sort            : int,
                     metadata        : dict={}):
     
-    test = job_params['test']
-    sort = job_params['sort']
     d = {
             'model': {
                 'weights'   : train_state.model_weights, 
@@ -226,12 +222,8 @@ def save_job_state( path            : str,
                 'history'   : train_state.history,
             },
             'test'        : test,
-            'sort'        : sort,
-            'time'        : train_state.timer,
-            'hash'        : experiment_hash,
-            'type'        : experiment_type,   
+            'sort'        : sort,   
             'metadata'    : metadata,
-            'params'      : task_params,
             '__version__' : 1
         }
 

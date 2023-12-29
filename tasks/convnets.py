@@ -25,7 +25,7 @@ from utils.convnets import (
     train_neural_net,
 )
 
-import validation
+import utils.validation as validation
 
 #
 # Base ConvNet class
@@ -89,10 +89,13 @@ class TrainCNN(Task):
                 logger.info(f"Saving job state for test {test} and sort {sort} into {self.output().path}")
                 save_job_state( self.output().path,
                         train_state, 
-                        job_params      = job_params, 
-                        task_params     = task_params,
-                        experiment_hash = self.get_hash(),
-                        experiment_type = self.get_task_family(),
+                        test = test,
+                        sort = sort,
+                        metadata = {
+                            "hash"        : self.get_hash(),
+                            "type"        : self.get_task_family(),
+                            "task_params" : task_params,
+                        }
                     )
             else:
                 output_path = experiment_path/f"cnn_fold{test}/sort{sort}/" 
@@ -178,7 +181,8 @@ class TrainBaseline(TrainCNN):
         train_state = validation.evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
-        return train_state, timedelta(seconds=(end - start))
+        logger.info(f"training toke {timedelta(seconds=(end - start))}...")
+        return train_state
 
        
 class TrainSynthetic(TrainCNN):
@@ -195,7 +199,9 @@ class TrainSynthetic(TrainCNN):
         train_state = validation.evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
-        return train_state, timedelta(seconds=(end - start))
+        logger.info(f"training toke {timedelta(seconds=(end - start))}...")
+
+        return train_state
 
 
 class TrainInterleaved(TrainCNN):
@@ -214,7 +220,9 @@ class TrainInterleaved(TrainCNN):
         train_state = validation.evaluate( train_state, train_real_fake, valid_real, test_real)
 
         end = default_timer()
-        return train_state, timedelta(seconds=(end - start))
+        logger.info(f"training toke {timedelta(seconds=(end - start))}...")
+
+        return train_state
         
 class TrainAltogether(TrainCNN):
 
@@ -238,7 +246,9 @@ class TrainAltogether(TrainCNN):
         train_state = validation.evaluate( train_state, train_real_fake, valid_real, test_real)
 
         end = default_timer()
-        return train_state, timedelta(seconds=(end - start))
+        logger.info(f"training toke {timedelta(seconds=(end - start))}...")
+
+        return train_state
             
 
 
@@ -299,7 +309,9 @@ class TrainBaselineFineTuning(TrainCNN):
         train_state = validation.evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
-        return train_state, timedelta(seconds=(end - start))
+        logger.info(f"training toke {timedelta(seconds=(end - start))}...")
+
+        return train_state
        
 
 
@@ -352,6 +364,8 @@ class TrainFineTuning(TrainCNN):
         train_state = validation.evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
-        return train_state, timedelta(seconds=(end - start))
+        logger.info(f"training toke {timedelta(seconds=(end - start))}...")
+
+        return train_state
 
 

@@ -5,12 +5,15 @@ import numpy as np
 import pandas as pd
 import pydicom as dicom
 
+from pathlib import Path
+from itertools import product
 from joblib import Memory
 from PIL import Image
 from glob import glob
 from sklearn.model_selection import StratifiedKFold
 
-MEMORY = Memory("/tmp/LTBI")
+MEMORY     = Memory("/tmp/LTBI")
+DATA_DIR   = Path(os.environ["DATA_DIR"])
 
 
 @MEMORY.cache
@@ -100,12 +103,10 @@ def get_filename(
 def cross_validation(
     data_info: pd.DataFrame,
     n_splits: int,
-    seed: int,
-) -> dict:
-    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    seed: int ) -> dict:
 
-    data_trn = []
-    data_tst = []
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    data_trn = []; data_tst = []
     for trn_idx, tst_idx in cv.split(data_info["path"], data_info["label"]):
         data_trn.append(data_info.iloc[trn_idx])
         data_tst.append(data_info.iloc[tst_idx])
@@ -120,9 +121,9 @@ def cross_validation(
 #
 # prepare real data
 #
-def prepare_real(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
+def prepare_real( dataset : str, tag : str, metadata: dict ) -> pd.DataFrame:
 
-     path = data_dir / f"{dataset}/{tag}/raw"
+     path = DATA_DIR / f"{dataset}/{tag}/raw"
      filepath = path / metadata["csv"]
      if not filepath.is_file():
          raise FileNotFoundError(f"File {filepath} not found.")
@@ -130,6 +131,7 @@ def prepare_real(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd
      data = pd.read_csv(filepath).rename(
          columns={"target": "label", "image_path": "path"}
      )
+
      data["name"]   = dataset
      data["type"]   = "real"
      data["source"] = "experimental"
@@ -164,15 +166,16 @@ def prepare_real(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd
          test["inner_fold"] = j
          metadata_list.append(test)
 
+
      return pd.concat(metadata_list)
 
 
 #
 # prepare p2p
 #
-def prepare_p2p(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
+def prepare_p2p(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
-    path = data_dir / f"{dataset}/{tag}/fake_images"
+    path = DATA_DIR / f"{dataset}/{tag}/fake_images"
     label_mapper = {"tb": True, "notb": False}
     metadata_list = []
     for label in metadata:
@@ -182,9 +185,9 @@ def prepare_p2p(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.
         data = pd.read_csv(filepath, usecols=["image_path", "test", "sort", "type"])
         data.rename(
             columns={
-                "test": "fold",
-                "sort": "inner_fold",
-                "type": "set",
+                "test"      : "fold",
+                "sort"      : "inner_fold",
+                "type"      : "set",
                 "image_path": "path",
             },
             inplace=True,
@@ -200,9 +203,9 @@ def prepare_p2p(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.
 #
 # prepare wgan data
 #
-def prepare_wgan(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
+def prepare_wgan(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
-    path = data_dir / f"{dataset}/{tag}/fake_images"
+    path = DATA_DIR / f"{dataset}/{tag}/fake_images"
     label_mapper = {"tb": True, "notb": False}
     metadata_list = []
     for label in metadata:
@@ -212,7 +215,11 @@ def prepare_wgan(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd
         data = pd.read_csv(filepath, usecols=["image_path", "test", "sort"])
         data = data.sample(n=600, random_state=42)  # sample a fraction of images
         data.rename(
-            columns={"test": "fold", "sort": "inner_fold", "image_path": "path"},
+            columns={
+                    "test": "fold", 
+                    "sort": "inner_fold", 
+                    "image_path": "path"
+                    },
             inplace=True,
         )
         data["label"] = label_mapper[label]
@@ -231,9 +238,9 @@ def prepare_wgan(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd
 #
 # prepare cycle data
 #
-def prepare_cycle(data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
+def prepare_cycle(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
-    path = data_dir / f"{dataset}/{tag}/fake_images"
+    path = DATA_DIR / f"{dataset}/{tag}/fake_images"
     label_mapper = {"tb": True, "notb": False}
     metadata_list = []
     for label in metadata:
@@ -259,18 +266,18 @@ def prepare_cycle(data_dir : str, dataset : str, tag : str, metadata: dict) -> p
 
 
 #
-# prepare 
+# prepare data
 #
-def prepare_data( source : str, data_dir : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
+def prepare_data( source : str, dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
     if source == "raw":
-        data = prepare_real(data_dir, dataset, tag, metadata)
+        data = prepare_real(dataset, tag, metadata)
     elif source == "pix2pix":
-        data = prepare_p2p(data_dir, dataset, tag, metadata)
+        data = prepare_p2p(dataset, tag, metadata)
     elif source == "wgan":
-        data = prepare_wgan(data_dir, dataset, tag, metadata)
+        data = prepare_wgan(dataset, tag, metadata)
     elif source == "cycle":
-        data = prepare_cycle(data_dir, dataset, tag, metadata)
+        data = prepare_cycle(dataset, tag, metadata)
     else:
         raise KeyError(f"Source '{source}' is not defined.")
-
+    return data
