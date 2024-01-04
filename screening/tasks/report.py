@@ -1,5 +1,6 @@
+from __future__ import annotations
 
-__all__ = []
+__all__ = ["ReportCNN"]
 
 import os, pickle, tarfile, luigi
 import numpy as np
@@ -7,7 +8,8 @@ import pandas as pd
 
 from pathlib import Path
 from loguru import logger
-from screening import TARGET_DIR, Task, CrossValidation
+from screening import TARGET_DIR
+from screening.tasks import Task, CrossValidation
 from screening.utils.report import (
     build_cross_val_metrics,
     calculate_performance_metrics,

@@ -1,21 +1,20 @@
-
+#!/usr/bin/env python
 
 
 import os, sys, pickle
+import argparse
 import pandas as pd
+
 from loguru import logger
-from utils import commons
-
-from utils.data import prepare_data
-
-from utils.convnets import (
+from screening.utils import commons
+from screening.utils.data import prepare_data
+from screening.utils.convnets import (
     split_dataframe,
     prepare_model,
     build_model_from_train_state,
     save_job_state,
 )
-
-from utils.validation import (
+from screening.validation import (
     evaluate,
 )
 
@@ -45,17 +44,9 @@ def convert_experiment_to_task( experiment_path : str, output_path : str, test :
 
     # get training control tags
     logger.info(f"Converting experiment with hash {experiment_hash}")
-
     logger.info(f"Converting Fold #{test} / Validation #{sort}...")
-
-    #folder_path = f'{output_path}/job.test_{test}.sort_{sort}'
-    #commons.create_folder(folder_path)
-    
     job_path = output_path + '/output.pkl'
-    #if os.path.exists(job_path):
-    #    logger.warning(f'job output exist into {output_path}')
-    #    return False
-        
+ 
     logger.info(f"Experiment type is {experiment_type}")
 
 
@@ -100,3 +91,32 @@ def convert_experiment_to_task( experiment_path : str, output_path : str, test :
 
     return True
 
+
+def run_converter():
+
+    physical_devices = tf.config.list_physical_devices('GPU')
+    if len(physical_devices)>0:
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-e", "--experiment_path", required=True, help="the path of the standalone experiment.")
+    parser.add_argument("--jobs","-j",help="Configuration JSON file.",default=None)
+    parser.add_argument("--output","-o",help="Output file.",default=os.getcwd())
+    args = parser.parse_args()
+
+    if len(sys.argv)==1:
+        parser.print_help()
+        sys.exit(1)
+
+    dry_run = os.environ.get('JOB_DRY_RUN', 'false') == 'true'
+
+    try:
+        job = json.load(open(args.jobs,'r'))
+        test = job['test']
+        sort = job['sort']
+        if not dry_run:
+            convert_experiment_to_task( args.experiment_path, args.output, test, sort)
+        sys.exit(0)
+    except  Exception as e:
+        traceback.print_exc()
+        sys.exit(1)

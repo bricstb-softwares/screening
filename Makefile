@@ -3,9 +3,11 @@ all: build_local
 SHELL := /bin/bash
 
 
+
+
 build_local:
 	virtualenv -p python ${VIRTUALENV_NAMESPACE}
-	source ${VIRTUALENV_NAMESPACE}/bin/activate && pip install --upgrade pip && pip install -r requirements.txt
+	source ${VIRTUALENV_NAMESPACE}/bin/activate && pip install --upgrade pip && pip install -e .
 
 
 build_base:
@@ -15,7 +17,7 @@ build_base:
 build_sif:
 	docker push ${DOCKER_NAMESPACE}/screening:base
 	singularity pull docker://${DOCKER_NAMESPACE}/screening:base
-	mv *.sif ${PROJECT_DIR}
+	mv *.sif ${PROJECT_DIR}/images
 
 
 run:

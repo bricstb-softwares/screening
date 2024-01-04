@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 __all__ = [
            "TrainBaseline", 
@@ -7,6 +8,8 @@ __all__ = [
            "TrainFineTuning",
            "TrainBaselineFineTuning",
            ]
+
+
 
 import pickle
 import luigi

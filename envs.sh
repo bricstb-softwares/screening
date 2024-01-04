@@ -2,6 +2,8 @@
 # docker
 export DOCKER_NAMESPACE=jodafons
 
+export VIRTUALENV_NAMESPACE='screening-env'
+
 # git control
 export GIT_SOURCE_COMMIT=$(git rev-parse HEAD)
 
@@ -26,6 +28,11 @@ export DATABASE_SERVER_URL=$POSTGRES_SERVER_URL
 # logger level
 export LOGURO_LEVEL="INFO"
 
+# add scripts to path
+#export PATH=$PATH:$REPO_DIR/scripts
+
+# add python to path
+#export PYTHONPATH=$PYTHONPATH:$REPO_DIR
 
 
 # export to singularity
@@ -41,6 +48,5 @@ export SINGULARITYENV_REPO_DIR=${REPO_DIR}
 export SINGULARITYENV_DATABASE_SERVER_URL=$POSTGRES_SERVER_URL
 export SINGULARITYENV_GIT_SOURCE_COMMIT=${GIT_SOURCE_COMMIT}
 export SINGULARITYENV_LOGURO_LEVEL=${LOGURO_LEVEL}
-export SINGULARITYENV_VIRTUALENV_DIR=${VIRTUALENV_DIR}
-export SINGULARITYENV_PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$REPO_DIR/scripts
-export SINGULARITYENV_PYTHONPATH=$REPO_DIR
+#export SINGULARITYENV_PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$REPO_DIR/scripts
+#export SINGULARITYENV_PYTHONPATH=$REPO_DIR

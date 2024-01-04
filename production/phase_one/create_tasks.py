@@ -19,13 +19,18 @@ def create_task( task_name, experiment_path, dry_run=False):
   local_path  = os.getcwd()
   proj_path   = os.environ["PROJECT_DIR"]
   image_path  = proj_path + '/images/screening_base.sif'
-  config_path = local_path + '/configs'
   repo_path   = os.environ['REPO_DIR']
+  virtualenv  = os.environ["VIRTUAL_ENV"]
 
-  exec_cmd  = f"cd {repo_path} && source envs.sh && cd $JOB_WORKAREA\n"
-  exec_cmd += f"run_converter.py --job %IN -e {experiment_path}"
+  # NOTE: inside of the image do:
+  exec_cmd  = f"cd {repo_path} && source envs.sh && source activate.sh\n" # activate virtualenv
+  exec_cmd += f"cd %JOB_WORKAREA\n" # back to the workarea 
+  exec_cmd += f"run_converter.py --job %IN -e {experiment_path}\n"
+
+  # extra envs
   envs      = { 'TARGET_DIR' : local_path+'/'+task_name, 'DATA_DIR':os.environ['DATA_DIR'] }
   binds     = {"/mnt/brics_data":"/mnt/brics_data", "/home":"/home"}
+  
   command = f"""maestro task create \
     -t {task_name} \
     -i {job_path} \
@@ -45,7 +50,7 @@ def create_task( task_name, experiment_path, dry_run=False):
 #
 job_path = os.getcwd()+'/jobs'
 
-train_path = '/home/philipp.gaspar/BRICS-TB/tb-brics-tools/screening/TARGETS/'
+train_path = '/home/philipp.gaspar/BRICS-TB/tb-brics-tools/screening/TARGETS'
 
 create_jobs(job_path)
 

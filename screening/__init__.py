@@ -16,13 +16,13 @@ from . import validation
 __all__.extend( validation.__all__ )
 from .validation import *
 
-from . import pipelines
-__all__.extend( pipelines.__all__ )
-from .pipelines import *
-
 from . import tasks
 __all__.extend( tasks.__all__ )
 from .tasks import *
+
+from . import pipelines
+__all__.extend( pipelines.__all__ )
+from .pipelines import *
 
 from . import console
 __all__.extend( console.__all__ )

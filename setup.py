@@ -12,7 +12,7 @@ setup(
     name='screening',
     version='1.0.0',
     license='GPL-3.0',
-    description='maestro orquestrator',
+    description='tb brics screening module',
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=find_packages(),
@@ -32,8 +32,9 @@ setup(
     ],
     entry_points = {
         'console_scripts' : [
-            'maestro = maestro.console.main:run',
-            'run_train = screening.console.train:run_train'
+            'run_train = screening.console.train:run',
+            'run_report = screening.console.report:run',
+            'run_converter = screening.console.reprocessing:run_converter',
         ]
     }
 )
