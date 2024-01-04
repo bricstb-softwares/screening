@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 import argparse, os, sys, json, traceback
 import tensorflow as tf 
@@ -24,7 +25,12 @@ parser.add_argument(
     default=None,
 )
 
-
+parser.add_argument(
+    "--output",
+    "-o",
+    help="Output file.",
+    default=os.getcwd()+'/tuning.pic',
+)
 args = parser.parse_args()
 
 if len(sys.argv)==1:
@@ -36,7 +42,7 @@ try:
     job = json.load(open(args.jobs,'r'))
     test = job['test']
     sort = job['sort']
-    convert_experiment_to_task( args.experiment_path, os.getcwd(), test, sort)
+    convert_experiment_to_task( args.experiment_path, args.output, test, sort)
     sys.exit(0)
 
 except  Exception as e:

@@ -11,6 +11,7 @@ from joblib import Memory
 from PIL import Image
 from glob import glob
 from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import train_test_split
 
 MEMORY     = Memory("/tmp/LTBI")
 DATA_DIR   = Path(os.environ["DATA_DIR"])

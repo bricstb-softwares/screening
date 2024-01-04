@@ -8,7 +8,6 @@ from utils.data import prepare_data
 
 
 load_dotenv()
-DATA_DIR   = Path(os.environ["DATA_DIR"])
 TARGET_DIR = Path(os.environ["TARGET_DIR"])
 
 
@@ -28,7 +27,7 @@ class CrossValidation(Task):
 
 
     def run(self):
-        metadata = prepare_data( self.source, DATA_DIR, self.dataset, self.tag, self.files)
+        metadata = prepare_data( self.source, self.dataset, self.tag, self.files)
         with self.output().open("w") as f:
             metadata.to_parquet(f)
 
