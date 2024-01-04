@@ -1,12 +1,14 @@
-import os
-from pathlib import Path
+__all__ = ["ReportPipeline"]
 
+import os
 import luigi
-from tasks.report import ReportCNN
+
+from pathlib import Path
+from screening.tasks import ReportCNN
+from screening import TARGET_DIR, DATA_DIR
 
 luigi.interface.core.log_level = "WARNING"
-DATA_DIR = Path(os.environ['DATA_DIR'])
-TARGET_DIR = Path(os.environ['TARGET_DIR'])
+
 
 class ReportPipeline(luigi.WrapperTask):
     experiment_hash = luigi.Parameter()

@@ -1,27 +1,39 @@
-from __future__ import annotations
+__all__ = [
+    # dataset build
+    "split_dataframe",
+    "build_dataset",
+    "build_altogether_dataset",
+    "build_interleaved_dataset",
+    # model
+    "create_cnn",
+    "prepare_model",
+    # save
+    "save_job_state",
+    "save_train_state",
+    # loaders
+    "build_model_from_job",
+    "build_model_from_train_state",
+]
 
-import os
-import pickle
-import json
+
+
+import os, pickle, json, datetime
 import typing as T
 import datetime
-from dataclasses import dataclass
-from pathlib import Path
-from pprint import pprint
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from joblib import Memory
+
+from dataclasses import dataclass
+from pathlib import Path
+from loguru import logger
 from tensorflow.python.keras import layers
 from tensorflow.python.keras.metrics import AUC, BinaryAccuracy, Precision, Recall
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.optimizers import adam_v2
 from tensorflow.keras.models import model_from_json
 
-from utils import report
-from pprint import pprint
 
-from loguru import logger
 
 #
 # dataset preparation
@@ -166,14 +178,13 @@ def create_cnn(image_shape):
 class ConvNetState:
     model_sequence  : dict 
     model_weights   : list
-    history         : dict[str, list]
+    history         : dict
     parameters      : dict
-    time            : datetime.timedelta
     
 
 def prepare_model(model, history, params):
     # type: (tf.python.keras.models.Sequential, dict, dict) -> ConvNetState
-    train_state = ConvNetState(json.loads(model.to_json()), model.get_weights(), history, params, 0)
+    train_state = ConvNetState(json.loads(model.to_json()), model.get_weights(), history, params)
     return train_state
 
 
@@ -229,6 +240,7 @@ def save_job_state( path            : str,
 
     with open(path, 'wb') as file:
         pickle.dump(d, file, pickle.HIGHEST_PROTOCOL)
+
 
 
 #
@@ -462,60 +474,8 @@ def train_fine_tuning(df_train, df_valid, params, model):
     return train_state
 
 
-#
-# evaluate
-#
 
 
 
-
-#
-# others
-#
-
-def evaluate_neural_net(df_eval, model_weights, params):
-    # type: (pd.DataFrame, list, dict[str, T.Any]) -> dict[str, T.Any]
-    ds_eval = build_dataset(
-        df=df_eval, image_shape=params["image_shape"], batch_size=params["batch_size"]
-    )
-
-    model = create_cnn(params["image_shape"])
-    model.set_weights(model_weights)
-
-    metrics = report.calculate_metrics(ds_eval, df_eval, model)
-
-    return metrics
-
-
-def get_metrics_dict() -> dict[str, T.Any]:
-    # type: () -> dict[str, T.Any]
-    metrics = {
-        "auc": [],
-        "sp": [],
-        "sp_oms": [],
-        "auc_oms": [],
-        "sensitivity": [],
-        "specificity": [],
-        "precision": [],
-        "recall": [],
-        "tprs": [],
-    }
-
-    return metrics
-
-
-def update_metrics_results(results, metrics):
-    # type: (dict[str, T.Any], dict[str, T.Any]) -> dict[str, T.Any]
-    metrics["auc"].append(results["auc"])
-    metrics["sp"].append(results["sp"])
-    metrics["auc_oms"].append(results["auc_oms"])
-    metrics["sp_oms"].append(results["sp_oms"])
-    metrics["sensitivity"].append(results["sensitivity"])
-    metrics["specificity"].append(results["specificity"])
-    metrics["precision"].append(results["precision"])
-    metrics["recall"].append(results["recall"])
-    metrics["tprs"].append(results["tprs"])
-
-    return metrics
 
 

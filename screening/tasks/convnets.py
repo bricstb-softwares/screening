@@ -1,4 +1,12 @@
-from __future__ import annotations
+
+__all__ = [
+           "TrainBaseline", 
+           "TrainInterleaved", 
+           "TrainAltogether",
+           "TrainSynthetic", 
+           "TrainFineTuning",
+           "TrainBaselineFineTuning",
+           ]
 
 import pickle
 import luigi
@@ -11,9 +19,10 @@ from itertools import product
 from pathlib import Path
 from timeit import default_timer
 from loguru import logger
-from tasks.commons import Task
-from tasks.data import CrossValidation
-from utils.convnets import (
+
+
+from screening.tasks import Task, CrossValidation
+from screening.utils.convnets import (
     save_train_state,
     save_job_state,
     build_model_from_job,
@@ -24,8 +33,10 @@ from utils.convnets import (
     train_interleaved,
     train_neural_net,
 )
+from screening.validation import (
+    evaluate
+)
 
-import utils.validation as validation
 
 #
 # Base ConvNet class
@@ -43,7 +54,6 @@ class TrainCNN(Task):
 
 
   
-
     def output(self) -> luigi.LocalTarget:
         file_name = "output.pkl" if self.get_job_params() else "task_params.pkl"
         output_file = Path(self.get_output_path()) / file_name
@@ -178,7 +188,7 @@ class TrainBaseline(TrainCNN):
         test_real   = split_dataframe(data, test, sort, "test_real" )
 
         train_state = train_neural_net(train_real, valid_real, task_params)
-        train_state = validation.evaluate( train_state, train_real, valid_real, test_real)
+        train_state = evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
         logger.info(f"training toke {timedelta(seconds=(end - start))}...")
@@ -196,7 +206,7 @@ class TrainSynthetic(TrainCNN):
         test_real   = split_dataframe(data, test, sort, "test_real" )
 
         train_state = train_neural_net(train_fake, valid_real, task_params)
-        train_state = validation.evaluate( train_state, train_fake, valid_real, test_real)
+        train_state = evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
         logger.info(f"training toke {timedelta(seconds=(end - start))}...")
@@ -217,7 +227,7 @@ class TrainInterleaved(TrainCNN):
             train_real, train_fake, valid_real, task_params
         )
         train_real_fake = pd.concat([train_real, train_fake])
-        train_state = validation.evaluate( train_state, train_real_fake, valid_real, test_real)
+        train_state = evaluate( train_state, train_real_fake, valid_real, test_real)
 
         end = default_timer()
         logger.info(f"training toke {timedelta(seconds=(end - start))}...")
@@ -231,10 +241,10 @@ class TrainAltogether(TrainCNN):
 
         start = default_timer()
 
-        train_real = split_dataframe(data, i, j, "train_real")
-        train_fake = split_dataframe(data, i, j, "train_fake")
-        valid_real = split_dataframe(data, i, j, "valid_real")
-        test_real  = split_dataframe(data, i, j, "test_real" )
+        train_real = split_dataframe(data, test, sort, "train_real")
+        train_fake = split_dataframe(data, test, sort, "train_fake")
+        valid_real = split_dataframe(data, test, sort, "valid_real")
+        test_real  = split_dataframe(data, test, sort, "test_real" )
         real_weights = (1 / len(train_real)) * np.ones(len(train_real))
         fake_weights = (1 / len(train_fake)) * np.ones(len(train_fake))
         weights = np.concatenate((real_weights, fake_weights))
@@ -243,7 +253,7 @@ class TrainAltogether(TrainCNN):
             train_real, train_fake, valid_real, weights, task_params
         )
         train_real_fake = pd.concat([train_real, train_fake])
-        train_state = validation.evaluate( train_state, train_real_fake, valid_real, test_real)
+        train_state = evaluate( train_state, train_real_fake, valid_real, test_real)
 
         end = default_timer()
         logger.info(f"training toke {timedelta(seconds=(end - start))}...")
@@ -306,7 +316,7 @@ class TrainBaselineFineTuning(TrainCNN):
         train_state = train_fine_tuning(
             train_fake, valid_real, test_real, task_params, model
         )
-        train_state = validation.evaluate( train_state, train_fake, valid_real, test_real)
+        train_state = evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
         logger.info(f"training toke {timedelta(seconds=(end - start))}...")
@@ -353,15 +363,15 @@ class TrainFineTuning(TrainCNN):
         
         start = default_timer()
 
-        train_real = split_dataframe(data, i, j, "train_real")
-        valid_real = split_dataframe(data, i, j, "valid_real")
-        test_real  = split_dataframe(data, i, j, "test_real" )
-        model      = self.get_parent_model(i,j)
+        train_real = split_dataframe(data, test, sort, "train_real")
+        valid_real = split_dataframe(data, test, sort, "valid_real")
+        test_real  = split_dataframe(data, test, sort, "test_real" )
+        model      = self.get_parent_model(test, sort)
                     
         train_state = train_fine_tuning(
                     train_real, valid_real, task_params, model
                 )
-        train_state = validation.evaluate( train_state, train_real, valid_real, test_real)
+        train_state = evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
         logger.info(f"training toke {timedelta(seconds=(end - start))}...")

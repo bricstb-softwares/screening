@@ -1,14 +1,11 @@
-import os
-import hashlib
-import json
-import luigi
-import collections
-from luigi import Task as LuigiTask
-from utils import commons
-from pprint import pprint
-import six
+__all__ = ["Task"]
 
-TARGET_DIR = os.environ["TARGET_DIR"]
+import os, hashlib, json, six, luigi
+
+from luigi           import Task as LuigiTask
+from screening       import TARGET_DIR
+from screening.utils import commons
+
 
 class Task(LuigiTask):
     

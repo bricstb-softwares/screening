@@ -1,17 +1,15 @@
-import os
+__all__ = ["CrossValidation"]
+
 import luigi
 from luigi.format import Nop
-from dotenv import load_dotenv
 from pathlib import Path
-from tasks.commons import Task
-from utils.data import prepare_data
 
-
-load_dotenv()
-TARGET_DIR = Path(os.environ["TARGET_DIR"])
+from screening import prepare_data, TARGET_DIR
+from screening.tasks.commons import Task
 
 
 class CrossValidation(Task):
+    
     dataset = luigi.Parameter()
     tag     = luigi.Parameter()
     source  = luigi.Parameter()

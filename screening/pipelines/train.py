@@ -1,5 +1,8 @@
+
+__all__ = ["processes"]
+
 import luigi
-from tasks.convnets import (
+from screening.tasks import (
     TrainAltogether,
     TrainBaseline,
     TrainBaselineFineTuning,
@@ -71,8 +74,11 @@ class InterleavedPipeline(luigi.WrapperTask):
     job = luigi.DictParameter()
 
     def requires(self):
+
+        dataset_info = dict(sorted(self.dataset_info.items()))
+
         yield TrainInterleaved(
-            dataset_info=self.dataset_info,
+            dataset_info=dataset_info,
             batch_size=self.batch_size,
             epochs=self.epochs,
             learning_rate=self.learning_rate,
@@ -94,8 +100,11 @@ class AltogetherPipeline(luigi.WrapperTask):
     job = luigi.DictParameter()
 
     def requires(self):
+
+        dataset_info = dict(sorted(self.dataset_info.items()))
+
         yield TrainAltogether(
-            dataset_info=self.dataset_info,
+            dataset_info=dataset_info,
             batch_size=self.batch_size,
             epochs=self.epochs,
             learning_rate=self.learning_rate,
@@ -117,8 +126,10 @@ class BaselineFineTuningPipeline(luigi.WrapperTask):
     job = luigi.DictParameter()
 
     def requires(self):
+
+        dataset_info = dict(sorted(self.dataset_info.items()))
         yield TrainBaselineFineTuning(
-            dataset_info=self.dataset_info,
+            dataset_info=dataset_info,
             batch_size=self.batch_size,
             epochs=self.epochs,
             learning_rate=self.learning_rate,
@@ -129,16 +140,6 @@ class BaselineFineTuningPipeline(luigi.WrapperTask):
         )
 
 
-
-class TaskCnvPipeline(luigi.WrapperTask):
-    experiment_path = luigi.Parameter()
-    output_path     = luigi.Parameter()
-
-    def requires(self):
-        yield TaskCnv(
-            experiment_path = self.experiment_path, 
-            output_path     = self.output_path
-        )
 
 
 processes = {

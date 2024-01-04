@@ -1,11 +1,17 @@
+__all__ = ["evaluate"]
 
-
-import utils.convnets as convnets
-import collections
-import pandas as pd
-import numpy as np
+from pprint import pprint
+from itertools import product
+from tqdm import tqdm
 from loguru import logger
 from sklearn.metrics import auc, confusion_matrix, roc_curve
+
+import collections, os, glob, json, copy, re, pickle
+import numpy as np
+import pandas as pd
+import os
+import tensorflow as tf
+import screening.utils.convnets as convnets
 
 
 
@@ -217,7 +223,6 @@ class OMS:
             metrics["false_negative"+label] = fn
             metrics["false_positive"+label] = fp
 
-            print(f'label = {label} , tn = {tn} , tp = {tp} , fn = {fn} , fp = {fp}')
             # given the roc
             metrics["sp_max" +label]     = sp_max
             metrics["auc"    +label]     = auc(fpr, tpr)
@@ -234,3 +239,12 @@ class OMS:
                 metrics["predictions"] = pd.DataFrame.from_dict(d)
   
         return metrics, thr
+
+
+
+
+
+
+
+
+
