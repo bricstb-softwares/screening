@@ -3,8 +3,6 @@ all: build_local
 SHELL := /bin/bash
 
 
-
-
 build_local:
 	virtualenv -p python ${VIRTUALENV_NAMESPACE}
 	source ${VIRTUALENV_NAMESPACE}/bin/activate && pip install --upgrade pip && pip install -e .
@@ -21,8 +19,10 @@ build_sif:
 
 
 run:
-	singularity run --nv --bind=/home:/home  --bind=${PROJECT_DIR}:${PROJECT_DIR} --writable-tmpfs ${PROJECT_DIR}/images/screening_base.sif  
+	singularity run --nv --bind=/home:/home --bind=${PROJECT_DIR}:${PROJECT_DIR} --writable-tmpfs ${PROJECT_DIR}/images/screening_base.sif  
 
+run_jupyter:
+	singularity exec --nv --bind=/home:/home --bind=${PROJECT_DIR}:${PROJECT_DIR} --writable-tmpfs ${PROJECT_DIR}/images/screening_base.sif /bin/bash ./activate.sh jupyter
 
 clean:
 	docker system prune -a
