@@ -95,15 +95,14 @@ class crossval_table:
         - path: the path to the tuned files;
         - tag: the training tag used;
         '''
-        paths = glob.glob(path)
+        paths = expand_folders(path, filters=['*.pkl'])
         logger.info( f"Reading file for {tag} tag from {path}" )
 
         # Creating the dataframe
         dataframe = collections.OrderedDict({
                               'train_tag'      : [],
-                              'model_idx'      : [],
+                              'test'           : [],
                               'sort'           : [],
-                              'init'           : [],
                               'file_name'      : [],
                           })
 
@@ -111,7 +110,7 @@ class crossval_table:
         logger.info( f'There are {len(paths)} files for this task...')
         logger.info( f'Filling the table... ')
 
-        for ituned_file_name in tqdm( paths , desc=fire+' Reading %s...'%tag):
+        for ituned_file_name in tqdm( paths , desc='Reading %s...'%tag):
 
             try:
                 ituned = load_file(ituned_file_name)
@@ -120,14 +119,13 @@ class crossval_table:
                 continue
 
 
-            history = ituned['history']
+            history = ituned['model']['history']
             metadata = ituned['metadata'] 
             dataframe['train_tag'].append(tag)
             dataframe['file_name'].append(ituned_file_name)
             # get the basic from model
-            dataframe['model_idx'].append(metadata['model_idx'])
-            dataframe['sort'].append(metadata['sort'])
-            dataframe['init'].append(metadata['init'])
+            dataframe['sort'].append(ituned['sort'])
+            dataframe['test'].append(ituned['test'])
 
             # Get the value for each wanted key passed by the user in the contructor args.
             for key, local  in self.__config_dict.items():

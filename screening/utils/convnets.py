@@ -226,14 +226,13 @@ def save_job_state( path            : str,
                     sort            : int,
                     metadata        : dict={}):
     
+    metadata.update({'test':test, 'sort':sort})
     d = {
             'model': {
                 'weights'   : train_state.model_weights, 
                 'sequence'  : train_state.model_sequence,
-                'history'   : train_state.history,
             },
-            'test'        : test,
-            'sort'        : sort,   
+            'history'     : train_state.history,
             'metadata'    : metadata,
             '__version__' : 1
         }
@@ -282,7 +281,7 @@ def build_model_from_job( job_path ):
     with open( job_path, 'r') as f:
         sequence = f['model']['sequence']
         weights  = f['model']['weights']
-        history  = f['model']['history']
+        history  = f['history']
         params   = f['params']
         # build model
         model = model_from_json( json.dumps(sequence, separators=(',', ':')) )
