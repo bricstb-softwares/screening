@@ -14,51 +14,50 @@ from screening import DATA_DIR, TARGET_DIR
 #
 def prepare_real( dataset : str, tag : str, metadata: dict ) -> pd.DataFrame:
 
-     path = DATA_DIR / f"{dataset}/{tag}/raw"
-     filepath = path / metadata["csv"]
-     if not filepath.is_file():
-         raise FileNotFoundError(f"File {filepath} not found.")
+    path = DATA_DIR / f"{dataset}/{tag}/raw"
+    filepath = path / metadata["csv"]
+    if not filepath.is_file():
+        raise FileNotFoundError(f"File {filepath} not found.")
+    
+    data = pd.read_csv(filepath).rename(
+        columns={"target": "label", "image_path": "path"}
+    )
+    def _append_basepath(row):
+       return f"{DATA_DIR}/{dataset}/{tag}/raw/{row.path}"
 
-     data = pd.read_csv(filepath).rename(
-         columns={"target": "label", "image_path": "path"}
-     )
-
-     data["name"]   = dataset
-     data["type"]   = "real"
-     data["source"] = "experimental"
-     filepath = path / metadata["pkl"]
-
-     if not filepath.is_file():
-         raise FileNotFoundError(f"File {filepath} not found.")
-
-     splits = pd.read_pickle(filepath)
-     folds = list(range(len(splits)))
-     inner_folds = list(range(len(splits[0])))
-     cols = ["path", "label", "type", "name", "source"]
-     metadata_list = []
-     
-     for i, j in product(folds, inner_folds):
-         trn_idx = splits[i][j][0]
-         val_idx = splits[i][j][1]
-         tst_idx = splits[i][j][2]
-         train = data.loc[trn_idx, cols]
-         train["set"] = "train"
-         train["fold"] = i
-         train["inner_fold"] = j
-         metadata_list.append(train)
-         valid = data.loc[val_idx, cols]
-         valid["set"] = "val"
-         valid["fold"] = i
-         valid["inner_fold"] = j
-         metadata_list.append(valid)
-         test = data.loc[tst_idx, cols]
-         test["set"] = "test"
-         test["fold"] = i
-         test["inner_fold"] = j
-         metadata_list.append(test)
-
-
-     return pd.concat(metadata_list)
+    data['path']   = data.apply(_append_basepath, axis='columns')
+    data["name"]   = dataset
+    data["type"]   = "real"
+    data["source"] = "experimental"
+    filepath = path / metadata["pkl"]
+    if not filepath.is_file():
+        raise FileNotFoundError(f"File {filepath} not found.")
+    splits = pd.read_pickle(filepath)
+    folds = list(range(len(splits)))
+    inner_folds = list(range(len(splits[0])))
+    cols = ["path", "label", "type", "name", "source"]
+    metadata_list = []
+    
+    for i, j in product(folds, inner_folds):
+        trn_idx = splits[i][j][0]
+        val_idx = splits[i][j][1]
+        tst_idx = splits[i][j][2]
+        train = data.loc[trn_idx, cols]
+        train["set"] = "train"
+        train["fold"] = i
+        train["inner_fold"] = j
+        metadata_list.append(train)
+        valid = data.loc[val_idx, cols]
+        valid["set"] = "val"
+        valid["fold"] = i
+        valid["inner_fold"] = j
+        metadata_list.append(valid)
+        test = data.loc[tst_idx, cols]
+        test["set"] = "test"
+        test["fold"] = i
+        test["inner_fold"] = j
+        metadata_list.append(test)
+    return pd.concat(metadata_list)
 
 
 #
@@ -69,6 +68,10 @@ def prepare_p2p(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
     path = DATA_DIR / f"{dataset}/{tag}/fake_images"
     label_mapper = {"tb": True, "notb": False}
     metadata_list = []
+    
+    def _append_basepath(row):
+        return f"{str(path)}/{row.path}"
+
     for label in metadata:
         filepath = path / metadata[label]
         if not filepath.is_file():
@@ -83,10 +86,13 @@ def prepare_p2p(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
             },
             inplace=True,
         )
-        data["label"] = label_mapper[label]
-        data["type"] = "fake"
-        data["name"] = dataset
-        data["source"] = "pix2pix"
+        data["label"]   = label_mapper[label]
+        data["type"]    = "fake"
+        data["name"]    = dataset
+        data["source"]  = "pix2pix"
+        data['path']    = data.apply(_append_basepath, axis='columns')
+    
+
         metadata_list.append(data)
     return pd.concat(metadata_list)
 
@@ -98,6 +104,10 @@ def prepare_wgan(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
     path = DATA_DIR / f"{dataset}/{tag}/fake_images"
     label_mapper = {"tb": True, "notb": False}
+
+    def _append_basepath(row):
+        return f"{str(path)}/{row.path}"
+
     metadata_list = []
     for label in metadata:
         filepath = path / metadata[label]
@@ -113,11 +123,14 @@ def prepare_wgan(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
                     },
             inplace=True,
         )
-        data["label"] = label_mapper[label]
-        data["type"] = "fake"
-        data["name"] = dataset
-        data["source"] = "wgan"
+        data["label"]   = label_mapper[label]
+        data["type"]    = "fake"
+        data["name"]    = dataset
+        data["source"]  = "wgan"
+        data['path']    = data.apply(_append_basepath, axis='columns')
+
         metadata_list.append(data)
+
     data_train, data_valid = train_test_split(
         pd.concat(metadata_list), test_size=0.2, shuffle=True, random_state=512
     )
@@ -133,6 +146,10 @@ def prepare_cycle(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
 
     path = DATA_DIR / f"{dataset}/{tag}/fake_images"
     label_mapper = {"tb": True, "notb": False}
+
+    def _append_basepath(row):
+        return f"{str(path)}/{row.path}"
+
     metadata_list = []
     for label in metadata:
         filepath = path / metadata[label]
@@ -152,6 +169,8 @@ def prepare_cycle(dataset : str, tag : str, metadata: dict) -> pd.DataFrame:
         data["type"] = "fake"
         data["name"] = dataset
         data["source"] = "cycle"
+        data['path']    = data.apply(_append_basepath, axis='columns')
+
         metadata_list.append(data)
     return pd.concat(metadata_list)
 

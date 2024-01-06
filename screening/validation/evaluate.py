@@ -29,6 +29,9 @@ def evaluate( train_state, train_data, valid_data, test_data ):
 
 
 
+#
+# train summary given best sp thrshold selection
+#
 class Summary:
 
     def __init__(self, key, batch_size=32, detailed=False):
@@ -62,10 +65,10 @@ class Summary:
 
         train_state.history[self.key] = d
 
-        logger.info( "Train     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max']*100     , d['sensitivity']*100     , d['specificity']*100, d['auc']))
-        logger.info( "Valid     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_val']*100 , d['sensitivity_val']*100 , d['specificity_val']*100, d['auc_val']))
-        logger.info( "Test      : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_test']*100, d['sensitivity_test']*100, d['specificity_test']*100, d['auc_test']))
-        logger.info( "Operation : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_op']*100  , d['sensitivity_op']*100  , d['specificity_op']*100, d['auc_op']))
+        logger.info( "Train     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['max_sp']*100     , d['sensitivity']*100     , d['specificity']*100, d['auc']))
+        logger.info( "Valid     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['max_sp_val']*100 , d['sensitivity_val']*100 , d['specificity_val']*100, d['auc_val']))
+        logger.info( "Test      : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['max_sp_test']*100, d['sensitivity_test']*100, d['specificity_test']*100, d['auc_test']))
+        logger.info( "Operation : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['max_sp_op']*100  , d['sensitivity_op']*100  , d['specificity_op']*100, d['auc_op']))
 
         return train_state
 
@@ -129,14 +132,18 @@ class Summary:
 
 
 
+#
+# 
+#
 class OMS:
 
-    def __init__(self, key, batch_size=32, min_sensitivity=0.9, min_specificity=0.7, detailed=False):
+    def __init__(self, key, batch_size=32, min_sensitivity=0.9, min_specificity=0.7, detailed=False, best_sp=True):
         self.key = key
         self.batch_size=batch_size
         self.detailed = detailed
         self.min_sensitivity = min_sensitivity
         self.min_specificity = min_specificity
+        self.best_sp = best_sp
 
 
     def __call__( self, train_state, train_data, valid_data, test_data ):
@@ -166,10 +173,10 @@ class OMS:
         train_state.history[self.key] = d # if not OMS area, this d will be empty ({})
 
         if threshold:
-            logger.info( "Train     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max']*100     , d['sensitivity']*100     , d['specificity']*100, d['auc']))
-            logger.info( "Valid     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_val']*100 , d['sensitivity_val']*100 , d['specificity_val']*100, d['auc_val']))
-            logger.info( "Test      : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_test']*100, d['sensitivity_test']*100, d['specificity_test']*100, d['auc_test']))
-            logger.info( "Operation : SP = %1.2f (Sens = %1.2f, Spec = %1.2f), AUC = %1.2f" % (d['sp_max_op']*100  , d['sensitivity_op']*100  , d['specificity_op']*100, d['auc_op']))
+            logger.info( "Train     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f)" % (d['sp_index']*100     , d['sensitivity']*100     , d['specificity']*100     )   )
+            logger.info( "Valid     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f)" % (d['sp_index_val']*100 , d['sensitivity_val']*100 , d['specificity_val']*100 )   )
+            logger.info( "Test      : SP = %1.2f (Sens = %1.2f, Spec = %1.2f)" % (d['sp_index_test']*100, d['sensitivity_test']*100, d['specificity_test']*100)   )
+            logger.info( "Operation : SP = %1.2f (Sens = %1.2f, Spec = %1.2f)" % (d['sp_index_op']*100  , d['sensitivity_op']*100  , d['specificity_op']*100  )   )
         else:
             logger.info("Not inside of OMS roc curve area...")
 
@@ -195,7 +202,7 @@ class OMS:
             # calculate metrics inside the WHO area
             who_selection = (tpr >= self.min_sensitivity) & ((1 - fpr) >= self.min_specificity)
 
-            if np.any(who_selection):
+            if np.any(who_selection) and self.best_sp:
                 sp_values = sp_values[who_selection]
                 sp_argmax = np.argmax(sp_values)
                 thr       = thresholds[sp_argmax]
@@ -254,9 +261,7 @@ class OMS:
             metrics["false_negative"+label] = -1
             metrics["false_positive"+label] = -1
 
-         
-
-
+        
         return metrics, thr
 
 

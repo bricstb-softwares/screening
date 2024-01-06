@@ -28,3 +28,7 @@ def run():
 
     pipeline = [ReportPipeline(args.experiment_hash, dataset_info)]
     luigi.build(pipeline, workers=1, local_scheduler=True)
+
+
+if __name__ == "__main__":
+    run()

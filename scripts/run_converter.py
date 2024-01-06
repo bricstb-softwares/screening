@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 
-import os, sys, pickle
+import os, sys, pickle, json, traceback
 import argparse
 import pandas as pd
+import tensorflow as tf
 
 from loguru import logger
 from screening.utils import commons
@@ -92,7 +93,7 @@ def convert_experiment_to_task( experiment_path : str, output_path : str, test :
     return True
 
 
-def run_converter():
+def run():
 
     physical_devices = tf.config.list_physical_devices('GPU')
     if len(physical_devices)>0:
@@ -120,3 +121,10 @@ def run_converter():
     except  Exception as e:
         traceback.print_exc()
         sys.exit(1)
+
+
+
+
+
+if __name__ == "__main__":
+    run()

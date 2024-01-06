@@ -25,7 +25,7 @@ def create_task( task_name, experiment_path, dry_run=False):
   # NOTE: inside of the image do:
   exec_cmd  = f"cd {repo_path} && source envs.sh && source activate.sh\n" # activate virtualenv
   exec_cmd += f"cd %JOB_WORKAREA\n" # back to the workarea 
-  exec_cmd += f"run_converter.py --job %IN -e {experiment_path}\n"
+  exec_cmd += f"run_converter --job %IN -e {experiment_path}\n"
 
   # extra envs
   envs      = { 'TARGET_DIR' : local_path+'/'+task_name, 'DATA_DIR':os.environ['DATA_DIR'] }
@@ -54,32 +54,41 @@ train_path = '/home/philipp.gaspar/BRICS-TB/tb-brics-tools/screening/TARGETS'
 
 create_jobs(job_path)
 
-#
-# 2023/08/08
-#
+
 dry_run=False
 
+
+#
+# Shenzhen + santacasa
+#
+
 # shenzhen (exp) + santa casa (exp)
-create_task( 'task.philipp.gaspar.convnets.baseline.989f87bed5' , train_path+'/TrainBaseline_989f87bed5', dry_run=dry_run )
+create_task( 'user.philipp.gaspar.convnets.baseline.shenzhen_santacasa.exp.989f87bed5.r1' , train_path+'/TrainBaseline_989f87bed5', dry_run=dry_run )
+# shenzhen (exp, wgan, p2p) + santa casa (exp, wgan, p2p)
+create_task( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa.exp_wgan_p2p.67de4190c1.r1'  , train_path+'/TrainAltogether_67de4190c1', dry_run=dry_run ) 
+# shenzhen (exp, wgan, p2p) + santa casa (exp, wgan, p2p)
+create_task( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa.exp_wgan_p2p.e540d24b4b.r1' , train_path+'/TrainInterleaved_e540d24b4b', dry_run=dry_run ) 
+# shenzhen (exp, wgan, p2p, cycle) + santa casa (exp, wgan, p2p, cycle)
+create_task( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa.exp_wgan_p2p_cycle.a19a3a4f8c.r1'  , train_path+'/TrainAltogether_a19a3a4f8c', dry_run=dry_run ) 
+# shenzhen (exp, wgan, p2p, cycle) + santa casa (exp, wgan, p2p, cycle)
+create_task( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa.exp_wgan_p2p_cycle.a19a3a4f8c.r1' , train_path+'/TrainInterleaved_a19a3a4f8c', dry_run=dry_run )
+
+
+
+
+
+#
+# Shenzhen + santacasa + manaus (manaus)
+#
+
+
 # shenzhen (exp) + santa casa (exp) + manaus (exp)
-create_task( 'task.philipp.gaspar.convnets.baseline.ffe6cbee11'    , train_path+'/TrainBaseline_ffe6cbee11', dry_run=dry_run ) 
-
-# shenzhen (exp, wgan, p2p) + santa casa (exp, wgan, p2p)
-create_task( 'task.philipp.gaspar.convnets.altogether.67de4190c1'  , train_path+'/TrainAltogether_67de4190c1', dry_run=dry_run ) 
-# shenzhen (exp, wgan, p2p, cycle) + santa casa (exp, wgan, p2p, cycle)
-create_task( 'task.philipp.gaspar.convnets.altogether.a19a3a4f8c'  , train_path+'/TrainAltogether_a19a3a4f8c', dry_run=dry_run ) 
-
+create_task( 'user.philipp.gaspar.convnets.baseline.shenzhen_santacasa_manaus.exp.ffe6cbee11.r1'    , train_path+'/TrainBaseline_ffe6cbee11', dry_run=dry_run ) 
 # shenzhen (exp, wgan, p2p) + santa casa (exp, wgan, p2p) + manaus (exp, wgan, p2p)
-create_task( 'task.philipp.gaspar.convnets.altogether.0d13030165'  , train_path+'/TrainAltogether_0d13030165', dry_run=dry_run ) 
-# shenzhen (exp, wgan, p2p, cycle) + santa casa (exp, wgan, p2p, cycle) + manaus (exp, wgan, p2p, cycle)
-create_task( 'task.philipp.gaspar.convnets.altogether.c5143abd1b'  , train_path+'/TrainAltogether_c5143abd1b', dry_run=dry_run ) 
-
-# shenzhen (exp, wgan, p2p) + santa casa (exp, wgan, p2p)
-create_task( 'task.philipp.gaspar.convnets.interleaved.e540d24b4b' , train_path+'/TrainInterleaved_e540d24b4b', dry_run=dry_run ) 
-# shenzhen (exp, wgan, p2p, cycle) + santa casa (exp, wgan, p2p, cycle)
-create_task( 'task.philipp.gaspar.convnets.interleaved.a19a3a4f8c' , train_path+'/TrainInterleaved_a19a3a4f8c', dry_run=dry_run )
-
+create_task( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa_manaus.exp_wgan_p2p.ac79954ba0.r1' , train_path+'/TrainIntereaved_ac79954ba0', dry_run=dry_run )
 # shenzhen (exp, wgan, p2p) + santa casa (exp, wgan, p2p) + manaus (exp, wgan, p2p)
-create_task( 'task.philipp.gaspar.convnets.interleaved.ac79954ba0' , train_path+'/TrainIntereaved_ac79954ba0', dry_run=dry_run )
+create_task( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa_manaus.exp_wgan_p2p.0d13030165.r1'  , train_path+'/TrainAltogether_0d13030165', dry_run=dry_run ) 
 # shenzhen (exp, wgan, p2p, cycle) + santa casa (exp, wgan, p2p, cycle) + manaus (exp, wgan, p2p, cycle)
-create_task( 'task.philipp.gaspar.convnets.interleaved.c5143abd1b' , train_path+'/TrainInterleaved_c5143abd1b', dry_run=dry_run ) 
+create_task( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa_manaus.exp_wgan_p2p_cycle.c5143abd1b.r1'  , train_path+'/TrainAltogether_c5143abd1b', dry_run=dry_run ) 
+# shenzhen (exp, wgan, p2p, cycle) + santa casa (exp, wgan, p2p, cycle) + manaus (exp, wgan, p2p, cycle)
+create_task( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa_manaus.exp_wgan_p2p_cycle.c5143abd1b.r1' , train_path+'/TrainInterleaved_c5143abd1b', dry_run=dry_run ) 

@@ -23,7 +23,3 @@ from .tasks import *
 from . import pipelines
 __all__.extend( pipelines.__all__ )
 from .pipelines import *
-
-from . import console
-__all__.extend( console.__all__ )
-from .console import *

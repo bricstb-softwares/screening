@@ -6,5 +6,6 @@ maestro run slurm --device 0\
                   --slurm-reservation joao.pinto_3\
                   --slurm-account joao.pinto\
                   --slurm-virtualenv $VIRTUAL_ENV\
+                  --database-recreate \
                   --slurm-nodes 7\
                   
