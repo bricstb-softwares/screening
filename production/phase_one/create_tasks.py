@@ -25,7 +25,7 @@ def create_task( task_name, experiment_path, dry_run=False):
   # NOTE: inside of the image do:
   exec_cmd  = f"cd {repo_path} && source envs.sh && source activate.sh\n" # activate virtualenv
   exec_cmd += f"cd %JOB_WORKAREA\n" # back to the workarea 
-  exec_cmd += f"run_converter --job %IN -e {experiment_path}\n"
+  exec_cmd += f"run_converter.py --job %IN -e {experiment_path}\n"
 
   # extra envs
   envs      = { 'TARGET_DIR' : local_path+'/'+task_name, 'DATA_DIR':os.environ['DATA_DIR'] }

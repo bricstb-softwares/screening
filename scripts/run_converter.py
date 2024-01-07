@@ -98,6 +98,7 @@ def run():
     physical_devices = tf.config.list_physical_devices('GPU')
     if len(physical_devices)>0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    tf.config.run_functions_eagerly(False)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--experiment_path", required=True, help="the path of the standalone experiment.")
@@ -115,8 +116,7 @@ def run():
         job = json.load(open(args.jobs,'r'))
         test = job['test']
         sort = job['sort']
-        if not dry_run:
-            convert_experiment_to_task( args.experiment_path, args.output, test, sort)
+        convert_experiment_to_task( args.experiment_path, args.output, test, sort)
         sys.exit(0)
     except  Exception as e:
         traceback.print_exc()
