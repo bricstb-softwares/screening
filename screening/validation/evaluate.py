@@ -25,8 +25,10 @@ def evaluate( train_state, train_data, valid_data, test_data ):
                     Reference( 'medium'  , sensitivity=0.9, specificity=0.7  ), # pd >= 0.9 and fa =< 0.3, best sp inside of this region
                     Reference( 'tight'   , specificity=0.7  ), # 0.3 <= of fake
                 ]
+
+    cache = {}
     for decor in decorators:
-        decor( train_state, train_data, valid_data, test_data )
+        decor( train_state, train_data, valid_data, test_data, cache=cache )
     return train_state
 
 
@@ -41,7 +43,7 @@ class Summary:
         self.batch_size=batch_size
 
 
-    def __call__( self, train_state, train_data, valid_data, test_data ):
+    def __call__( self, train_state, train_data, valid_data, test_data, cache={} ):
 
         model, history, params = convnets.build_model_from_train_state(train_state)
 
@@ -54,10 +56,10 @@ class Summary:
         ds_operation = convnets.build_dataset(op_data   , params["image_shape"], batch_size=self.batch_size)
 
         # set threshold by validation set
-        metrics_train, threshold = self.calculate( ds_train    , train_data    , model  )              
-        metrics_val  , _         = self.calculate( ds_valid    , valid_data    , model , label="_val" , threshold=threshold )
-        metrics_test , _         = self.calculate( ds_test     , test_data     , model , label="_test", threshold=threshold ) 
-        metrics_op   , _         = self.calculate( ds_operation, op_data       , model , label="_op"  , threshold=threshold )
+        metrics_train, threshold = self.calculate( ds_train    , train_data    , model , cache )              
+        metrics_val  , _         = self.calculate( ds_valid    , valid_data    , model , cache, label="_val" , threshold=threshold )
+        metrics_test , _         = self.calculate( ds_test     , test_data     , model , cache, label="_test", threshold=threshold ) 
+        metrics_op   , _         = self.calculate( ds_operation, op_data       , model , cache, label="_op"  , threshold=threshold )
 
 
         for metrics in [metrics_val, metrics_train, metrics_test, metrics_op]:
@@ -75,12 +77,17 @@ class Summary:
 
 
 
-    def calculate( self, ds, df, model, label='', threshold=None):
+    def calculate( self, ds, df, model, cache, label='', threshold=None):
 
         metrics = collections.OrderedDict({})
 
         y_true  = df["label"].values.astype(int)
-        y_prob  = model.predict(ds).squeeze()
+
+        if f'y_prob{label}' not in cache.keys() :
+            y_prob  = model.predict(ds).squeeze() 
+            cache[f'y_prob{label}'] = y_prob
+        else:
+            y_prob = cache[f'y_prob{label}']
     
         # get roc curve
         fpr, tpr, thresholds = roc_curve(y_true, y_prob)
@@ -135,7 +142,7 @@ class Reference:
         self.specificity = specificity
 
 
-    def __call__( self, train_state, train_data, valid_data, test_data ):
+    def __call__( self, train_state, train_data, valid_data, test_data, cache={} ):
 
         model, history, params = convnets.build_model_from_train_state(train_state)
 
@@ -148,10 +155,10 @@ class Reference:
         ds_operation = convnets.build_dataset(op_data   , params["image_shape"], batch_size=self.batch_size)
 
         # set threshold by validation set
-        metrics_train, threshold = self.calculate( ds_train    , train_data    , model  )              
-        metrics_val  , _         = self.calculate( ds_valid    , valid_data    , model , label="_val" , threshold=threshold )
-        metrics_test , _         = self.calculate( ds_test     , test_data     , model , label="_test", threshold=threshold ) 
-        metrics_op   , _         = self.calculate( ds_operation, op_data       , model , label="_op"  , threshold=threshold )
+        metrics_train, threshold = self.calculate( ds_train    , train_data    , model , cache )              
+        metrics_val  , _         = self.calculate( ds_valid    , valid_data    , model , cache, label="_val" , threshold=threshold )
+        metrics_test , _         = self.calculate( ds_test     , test_data     , model , cache, label="_test", threshold=threshold ) 
+        metrics_op   , _         = self.calculate( ds_operation, op_data       , model , cache, label="_op"  , threshold=threshold )
 
         # update everything
         for metrics in [metrics_val, metrics_train, metrics_test, metrics_op]:
@@ -173,13 +180,18 @@ class Reference:
 
 
 
-    def calculate( self, ds, df, model, label='', threshold=None):
+    def calculate( self, ds, df, model, cache, label='', threshold=None):
 
         metrics = collections.OrderedDict({})
 
         y_true = df["label"].values.astype(int)
-        y_prob = model.predict(ds).squeeze()
-    
+
+        if f'y_prob{label}' not in cache.keys() :
+            y_prob  = model.predict(ds).squeeze() 
+            cache[f'y_prob{label}'] = y_prob
+        else:
+            y_prob = cache[f'y_prob{label}']
+
         # get roc curve
         fpr, tpr, thresholds = roc_curve(y_true, y_prob)
         sp_values = np.sqrt(np.sqrt(tpr * (1 - fpr)) * (0.5 * (tpr + (1 - fpr))))
