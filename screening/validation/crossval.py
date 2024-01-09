@@ -13,6 +13,7 @@ import pandas as pd
 import os
 import tensorflow as tf
 import screening.utils.convnets as convnets
+from pybeamer import *
 
 model_from_json = tf.keras.models.model_from_json
 
@@ -119,13 +120,13 @@ class crossval_table:
                 continue
 
 
-            history = ituned['model']['history']
+            history = ituned['history']
             metadata = ituned['metadata'] 
             dataframe['train_tag'].append(tag)
             dataframe['file_name'].append(ituned_file_name)
             # get the basic from model
-            dataframe['sort'].append(ituned['sort'])
-            dataframe['test'].append(ituned['test'])
+            dataframe['sort'].append(metadata['sort'])
+            dataframe['test'].append(metadata['test'])
 
             # Get the value for each wanted key passed by the user in the contructor args.
             for key, local  in self.__config_dict.items():
@@ -200,7 +201,7 @@ class crossval_table:
     #
     # Return only best inits
     #
-    def filter_inits(self, key, idxmin=False):
+    def filter_sorts(self, key, idxmin=False):
         '''
         This method will filter the Dataframe based on given key in order to get the best inits for every sort.
 
@@ -209,17 +210,17 @@ class crossval_table:
         - key: the column to be used for filter.
         '''
         if idxmin:
-            idxmask = self.table.groupby(['train_tag', 'model_idx', 'sort'])[key].idxmin().values
+            idxmask = self.table.groupby(['train_tag', 'test'])[key].idxmin().values
             return self.table.loc[idxmask]
         else:
-            idxmask = self.table.groupby(['train_tag', 'model_idx', 'sort'])[key].idxmax().values
+            idxmask = self.table.groupby(['train_tag', 'test'])[key].idxmax().values
             return self.table.loc[idxmask]
 
 
     #
     # Get the best sorts from best inits table
     #
-    def filter_sorts(self, best_inits, key, idxmin=False):
+    def filter_tests(self, best_sorts, key, idxmin=False):
         '''
         This method will filter the Dataframe based on given key in order to get the best model for every configuration.
 
@@ -228,15 +229,6 @@ class crossval_table:
         - key: the column to be used for filter.
         '''
         if idxmin:
-            idxmask = best_inits.groupby(['train_tag', 'model_idx'])[key].idxmin().values
-            return best_inits.loc[idxmask]
-        else:
-            idxmask = best_inits.groupby(['train_tag', 'model_idx'])[key].idxmax().values
-            return best_inits.loc[idxmask]
-
-
-    def filter_neurons( self, best_sorts, key, idxmin = False):
-        if idxmin:
             idxmask = best_sorts.groupby(['train_tag'])[key].idxmin().values
             return best_sorts.loc[idxmask]
         else:
@@ -244,8 +236,94 @@ class crossval_table:
             return best_sorts.loc[idxmask]
 
 
-    def describe(self, best_inits):
 
-        dataframe = {'train_tag', }
- 
+    def describe( self, best_sorts ):
+
+        dataframe = collections.OrderedDict({})
+        keys = ['train_tag', 'test', 'sort', 'file_name']
+
+        def add(d, key,value):
+            if key in d.keys():
+                d[key]=value
+            else:
+                d[key] = [value]
+
+        for train_tag in best_sorts.train_tag.unique():
+
+            data = best_sorts.loc[best_sorts.train_tag==train_tag]
+            for col_name in data.columns.values:
+                if col_name in keys:
+                    continue
+                add( dataframe , 'train_tag' , train_tag )
+                add( dataframe , col_name +'_mean', data[col_name].mean())
+                add( dataframe , col_name +'_std' , data[col_name].std() )
+
+        return pd.DataFrame(dataframe)
+
+
+    def best_models(self):
+        pass
+
+    def plot_roc_curve( self, best_sorts ):
+        pass
+
+    def report( self, best_sorts , title : str , outputFile : str ):
+
+   
+        cv_table    = self.describe( best_sorts )
+        #best_models = self.best_models( best_sorts )
+
+        # Default colors
+        #colorPD = '\\cellcolor[HTML]{9AFF99}'; colorPF = ''; colorSP = ''
+        col_names = ['Sens []', 'SP []', 'Spec []', 'AUC']
+     
+        # Apply beamer
+        with BeamerTexReportTemplate1( theme = 'Berlin'
+                                       , _toPDF = True
+                                       , title = title
+                                       , outputFile = outputFile
+                                       , font = 'structurebold' ):
+
+
+            # For each tag
+            for train_tag in cv_table.train_tag.unique():
+
+                t    = cv_table.loc[cv_table.train_tag==train_tag]
+
+                # Prepare tables
+                lines1 = []
+                lines1 += [ HLine(_contextManaged = False) ]
+                lines1 += [ HLine(_contextManaged = False) ]
+            
+                lines1 += [ TableLine( columns = ['', '', 'Sens. []', 'SP []', 'Spec. []'], _contextManaged = False ) ]
+                lines1 += [ HLine(_contextManaged = False) ]
+
+                print(train_tag)
+
+                keys = ['sensitivity', 'sp_index', 'specificity', 'sensitivity', 'sp_index', 'specificity' ]
+
+                row =  [ '%1.2f$\pm$%1.2f'%(t[key+'_val_mean']*100 , t[key+'_val_std']*100) for key in keys]
+
+                lines1 += [ TableLine( columns = ['\multirow{3}{*}{'+train_tag+'}', 'Train']  + row , _contextManaged = False ) ]
+                lines1 += [ TableLine( columns = ['', 'Val.'] + [ '%1.2f$\pm$%1.2f'%(t[key+'_val_mean']*100 , t[key+'_val_std']*100) for key in keys] , _contextManaged = False ) ]
+                lines1 += [ TableLine( columns = ['', 'Test'] + [ '%1.2f$\pm$%1.2f'%(t[key+'_test_mean']*100, t[key+'_test_std']*100) for key in keys], _contextManaged = False ) ]
+
+                lines1 += [ HLine(_contextManaged = False) ]
+                lines1 += [ HLine(_contextManaged = False) ]
+
+                print(lines1)
+                # Create all tables into the PDF Latex
+                with BeamerSlide( title = f"The Cross Validation Efficiency: {train_tag}"  ):
+                    with Table( caption = r'The values for each method.') as table:
+                        with ResizeBox( size = 1. ) as rb:
+                            with Tabular( columns = '|lc|' + 'cccccc|' ) as tabular:
+                                tabular = tabular
+                                for line in lines1:
+                                    if isinstance(line, TableLine):
+                                        tabular += line
+                                    else:
+                                        TableLine(line, rounding = None)
+
+               
+  
 

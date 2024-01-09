@@ -20,8 +20,10 @@ import screening.utils.convnets as convnets
 def evaluate( train_state, train_data, valid_data, test_data ):
 
     decorators = [
-                    Summary( key = 'summary', detailed=False ),
-                    OMS( key = "oms" , min_sensitivity = 0.9, min_specificity = 0.7, detailed=False)
+                    Summary( key = 'summary' ),
+                    Reference( 'loose'   , sensitivity=0.9  ), # 0.9 >= of detection
+                    Reference( 'medium'  , sensitivity=0.9, specificity=0.7  ), # pd >= 0.9 and fa =< 0.3, best sp inside of this region
+                    Reference( 'tight'   , specificity=0.7  ), # 0.3 <= of fake
                 ]
     for decor in decorators:
         decor( train_state, train_data, valid_data, test_data )
@@ -34,10 +36,9 @@ def evaluate( train_state, train_data, valid_data, test_data ):
 #
 class Summary:
 
-    def __init__(self, key, batch_size=32, detailed=False):
+    def __init__(self, key, batch_size=32):
         self.key = key
         self.batch_size=batch_size
-        self.detailed = detailed
 
 
     def __call__( self, train_state, train_data, valid_data, test_data ):
@@ -117,16 +118,6 @@ class Summary:
         metrics["roc"    +label]     = {"fpr":fpr, "tpr":tpr, "thresholds":thresholds}
         metrics["mse"    +label]     = mean_squared_error(y_true, y_prob)
 
-        if self.detailed:
-            # calculate predictions
-            d = {
-                "image_name" : df["path"].apply(lambda x: x.split("/")[-1].split(".")[0]),
-                "y_prob"     : y_prob,
-                "y_pred"     : y_pred,
-            }
-            metrics["predictions"] = pd.DataFrame.from_dict(d)
-     
-  
         return metrics, thr
 
 
@@ -135,15 +126,13 @@ class Summary:
 #
 # 
 #
-class OMS:
+class Reference:
 
-    def __init__(self, key, batch_size=32, min_sensitivity=0.9, min_specificity=0.7, detailed=False, best_sp=True):
+    def __init__(self, key, batch_size=32, sensitivity=None, specificity=None):
         self.key = key
         self.batch_size=batch_size
-        self.detailed = detailed
-        self.min_sensitivity = min_sensitivity
-        self.min_specificity = min_specificity
-        self.best_sp = best_sp
+        self.sensitivity = sensitivity
+        self.specificity = specificity
 
 
     def __call__( self, train_state, train_data, valid_data, test_data ):
@@ -168,9 +157,9 @@ class OMS:
         for metrics in [metrics_val, metrics_train, metrics_test, metrics_op]:
             d.update(metrics)
 
-        d['oms'] = True if threshold else False
 
         train_state.history[self.key] = d # if not OMS area, this d will be empty ({})
+
 
         if threshold:
             logger.info( "Train     : SP = %1.2f (Sens = %1.2f, Spec = %1.2f)" % (d['sp_index']*100     , d['sensitivity']*100     , d['specificity']*100     )   )
@@ -199,13 +188,30 @@ class OMS:
         thr       = None
 
         if not threshold:
-            # calculate metrics inside the WHO area
-            who_selection = (tpr >= self.min_sensitivity) & ((1 - fpr) >= self.min_specificity)
 
-            if np.any(who_selection) and self.best_sp:
-                sp_values = sp_values[who_selection]
-                sp_argmax = np.argmax(sp_values)
-                thr       = thresholds[sp_argmax]
+            def closest_after( values , ref ):
+              values_d = values-ref; values_d[values_d<0]=999; index = values_d.argmin()
+              return values[index], index
+
+            if self.sensitivity and not self.specificity:
+                sensitivity , index = closest_after( tpr, self.sensitivity )
+                thr = thresholds[index]
+                logger.info("closest sensitivity as %1.2f (%1.2f)" % (sensitivity, self.sensitivity))
+
+            elif self.specificity and not self.sensitivity:
+                specificity , index = closest_after( 1-fpr, self.specificity )
+                thr = thresholds[index]
+                logger.info("closest specificity as %1.2f (%1.2f)" % (specificity, self.specificity))
+
+            else: # sp max inside of the area
+
+                # calculate metrics inside the WHO area
+                who_selection = (tpr >= self.sensitivity) & ((1 - fpr) >= self.specificity)
+                if np.any(who_selection):
+                    logger.info("selection inside of the WHO area")
+                    sp_values = sp_values[who_selection]
+                    sp_argmax = np.argmax(sp_values)
+                    thr       = thresholds[sp_argmax]
         else:
             thr = threshold
 
@@ -223,6 +229,7 @@ class OMS:
             # given the threshold
             metrics['threshold'+label]      = thr
             metrics["sp_index"+label]       = np.sqrt(np.sqrt(det * (1 - fa)) * (0.5 * (det + (1 - fa))))
+            metrics["pd"+label]             = det
             metrics['fa'+label]             = fa
             metrics["sensitivity"+label]    = tp / (tp + fn) if (tp+fn) > 0 else 0 # same as recall
             metrics["specificity"+label]    = tn / (tn + fp) if (tn+fp) > 0 else 0
@@ -233,17 +240,6 @@ class OMS:
             metrics["true_positive"+label]  = tp
             metrics["false_negative"+label] = fn
             metrics["false_positive"+label] = fp
-
-
-            if self.detailed:
-                # calculate predictions
-                d = {
-                    "image_name" : df["path"].apply(lambda x: x.split("/")[-1].split(".")[0]),
-                    "y_prob"     : y_prob,
-                    "y_pred"     : y_pred,
-                }
-                metrics["predictions"] = pd.DataFrame.from_dict(d)
-
 
         else:
             # given the threshold
@@ -261,9 +257,8 @@ class OMS:
             metrics["false_negative"+label] = -1
             metrics["false_positive"+label] = -1
 
-        
-        return metrics, thr
 
+        return metrics, thr
 
 
 
