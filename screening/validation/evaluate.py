@@ -19,7 +19,7 @@ from screening import DATA_DIR
 
 def evaluate( train_state, train_data, valid_data, test_data ):
 
-    out_of_sample = Inference( 'inference' , ['russia'] )
+    out_of_sample = Inference( 'inference' , ['russia', 'caxias', 'indonesia'] )
 
     decorators = [
                     Summary( key = 'summary', out_of_sample=out_of_sample ),
@@ -125,7 +125,7 @@ class Summary:
         y_pred    = (y_prob >= thr).astype(int)
 
         # confusion matrix and metrics
-        conf_matrix                  = confusion_matrix(y_true, y_pred)
+        conf_matrix                  = confusion_matrix(y_true, y_pred , labels=[False,True])
         tn, fp, fn, tp               = conf_matrix.ravel()
         fa = (fp / (tn + fp)) if (tn+fp) > 0 else 0
         det = (tp / (tp + fn)) if (tp+fn) > 0 else 0 # same as recall or sensibility
@@ -275,7 +275,7 @@ class Reference:
 
         y_pred    = (y_prob >= thr).astype(int)
         # confusion matrix and metrics
-        conf_matrix                  = confusion_matrix(y_true, y_pred)
+        conf_matrix                  = confusion_matrix(y_true, y_pred, labels=[False,True])
         tn, fp, fn, tp               = conf_matrix.ravel()
         fa = (fp / (tn + fp)) if (tn+fp) > 0 else 0
         det = (tp / (tp + fn)) if (tp+fn) > 0 else 0 # same as recall or sensibility
@@ -329,6 +329,16 @@ class Inference:
         'imageamento_anonimizado_valid' : {
             'dataset'   : 'SantaCasa',
             'raw'       : str(DATA_DIR)+'/SantaCasa/imageamento_anonimizado_valid/raw/SantaCasa_imageamento_anonimizado_valid_table_from_raw.csv',
+        },
+        'caxias'   : {
+            'dataset'   : 'Caxias',
+            'raw'       : str(DATA_DIR)+'/Caxias/caxias/raw/images.csv',
+            'blacklist' : str(DATA_DIR)+'/Caxias/caxias/raw/blacklist.pkl', # NOTE: this is optional configuration
+        },
+        'indonesia'   : {
+            'dataset'   : 'Indonesia',
+            'raw'       : str(DATA_DIR)+'/Indonesia/indonesia/raw/images.csv',
+            'blacklist' : str(DATA_DIR)+'/Indonesia/indonesia/raw/blacklist.pkl', # NOTE: this is optional configuration
         },
     }
 
@@ -408,7 +418,7 @@ class Inference:
         y_pred    = (y_prob >= thr).astype(int)
 
         # confusion matrix and metrics
-        conf_matrix                  = confusion_matrix(y_true, y_pred)
+        conf_matrix                  = confusion_matrix(y_true, y_pred, labels=[False,True])
         tn, fp, fn, tp               = conf_matrix.ravel()
         fa = (fp / (tn + fp)) if (tn+fp) > 0 else 0
         det = (tp / (tp + fn)) if (tp+fn) > 0 else 0 # same as recall or sensibility

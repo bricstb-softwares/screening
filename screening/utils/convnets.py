@@ -224,8 +224,11 @@ def save_job_state( path            : str,
                     train_state     : ConvNetState, 
                     test            : int,
                     sort            : int,
-                    metadata        : dict={}):
+                    metadata        : dict={},
+                    version         : int=1  # version one should be default for the phase one project
+                ):
     
+    # NOTE: version will be used to configure the pre-processing function during the load inference
     metadata.update({'test':test, 'sort':sort})
     d = {
             'model': {
@@ -234,7 +237,7 @@ def save_job_state( path            : str,
             },
             'history'     : train_state.history,
             'metadata'    : metadata,
-            '__version__' : 1
+            '__version__' : version
         }
 
     with open(path, 'wb') as file:
