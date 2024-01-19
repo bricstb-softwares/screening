@@ -16,16 +16,29 @@ import screening.utils.convnets as convnets
 from screening import DATA_DIR
 
 
+class EvaluationFlags:
+    set_by_valid = False
+    out_of_sample_datasets = ['russia', 'caxias', 'indonesia']
+
+
 
 def evaluate( train_state, train_data, valid_data, test_data ):
 
     out_of_sample = Inference( 'inference' , ['russia', 'caxias', 'indonesia'] )
 
     decorators = [
+                    # NOTE: set everythong by train dataset (right way)
                     Summary( key = 'summary', out_of_sample=out_of_sample ),
                     Reference( 'loose'      , out_of_sample=out_of_sample, sensitivity=0.9  ), # 0.9 >= of detection
                     Reference( 'medium'     , out_of_sample=out_of_sample, sensitivity=0.9, specificity=0.7  ), # pd >= 0.9 and fa =< 0.3, best sp inside of this region
                     Reference( 'tight'      , out_of_sample=out_of_sample, specificity=0.7  ), # 0.3 <= of fake
+
+                    # NOTE: set everything by val dataset (just for )
+                    Summary( key = 'summary_val', set_by_valid=True, out_of_sample=out_of_sample ),
+                    Reference( 'loose_val'      , set_by_valid=True, out_of_sample=out_of_sample, sensitivity=0.9  ), # 0.9 >= of detection
+                    Reference( 'medium_val'     , set_by_valid=True, out_of_sample=out_of_sample, sensitivity=0.9, specificity=0.7  ), # pd >= 0.9 and fa =< 0.3, best sp inside of this region
+                    Reference( 'tight_val'      , set_by_valid=True, out_of_sample=out_of_sample, specificity=0.7  ), # 0.3 <= of fake
+
                 ]
 
     # create the context
@@ -55,10 +68,15 @@ def evaluate( train_state, train_data, valid_data, test_data ):
 #
 class Summary:
 
-    def __init__(self, key, batch_size=32, out_of_sample=None):
+    def __init__(self, key     : str, 
+                 batch_size    : int=32, 
+                 out_of_sample : bool=None, 
+                 set_by_valid  : bool=False):
+
         self.key = key
         self.batch_size=batch_size
         self.out_of_sample=out_of_sample
+        self.set_by_valid=set_by_valid
 
 
     def __call__( self, ctx , output_d):
@@ -80,8 +98,13 @@ class Summary:
         ds_operation = convnets.build_dataset(op_data   , params["image_shape"], batch_size=self.batch_size)
 
         # set threshold by validation set
-        metrics_train, threshold = self.calculate( ds_train    , train_data    , model , cache )              
-        metrics_val  , _         = self.calculate( ds_valid    , valid_data    , model , cache, label="_val" , threshold=threshold )
+        if self.set_by_valid:
+            metrics_val  , threshold = self.calculate( ds_valid    , valid_data    , model , cache, label="_val"  )
+            metrics_train, _         = self.calculate( ds_train    , train_data    , model , cache, threshold=threshold  )                     
+        else:
+            metrics_train, threshold = self.calculate( ds_train    , train_data    , model , cache )              
+            metrics_val  , _         = self.calculate( ds_valid    , valid_data    , model , cache, label="_val" , threshold=threshold )
+
         metrics_test , _         = self.calculate( ds_test     , test_data     , model , cache, label="_test", threshold=threshold ) 
         metrics_op   , _         = self.calculate( ds_operation, op_data       , model , cache, label="_op"  , threshold=threshold )
 
@@ -162,8 +185,15 @@ class Summary:
 #
 class Reference:
 
-    def __init__(self, key, batch_size=32, sensitivity=None, specificity=None, 
-                 min_sensitivity=0.9, min_specificity=0.7, out_of_sample=None):
+    def __init__(self, key : str, 
+                 batch_size         : int=32, 
+                 sensitivity        =None, 
+                 specificity        =None, 
+                 min_sensitivity    :float=0.9, 
+                 min_specificity    : float=0.7, 
+                 out_of_sample      =None,
+                 set_by_valid       : bool=False):
+
         self.key = key
         self.batch_size=batch_size
         self.sensitivity = sensitivity
@@ -171,6 +201,7 @@ class Reference:
         self.min_sensitivity = min_sensitivity
         self.min_specificity = min_specificity
         self.out_of_sample=out_of_sample
+        self.set_by_valid=set_by_valid
 
 
     def __call__( self, ctx, output_d ):
@@ -194,10 +225,17 @@ class Reference:
         ds_operation = convnets.build_dataset(op_data   , params["image_shape"], batch_size=self.batch_size)
 
         # set threshold by validation set
-        metrics_train, threshold = self.calculate( ds_train    , train_data    , model , cache )              
-        metrics_val  , _         = self.calculate( ds_valid    , valid_data    , model , cache, label="_val" , threshold=threshold )
+        if self.set_by_valid:
+            metrics_val  , threshold = self.calculate( ds_valid    , valid_data    , model , cache, label="_val"  )
+            metrics_train, _         = self.calculate( ds_train    , train_data    , model , cache, threshold=threshold  )                     
+        else:
+            metrics_train, threshold = self.calculate( ds_train    , train_data    , model , cache )              
+            metrics_val  , _         = self.calculate( ds_valid    , valid_data    , model , cache, label="_val" , threshold=threshold )
+
         metrics_test , _         = self.calculate( ds_test     , test_data     , model , cache, label="_test", threshold=threshold ) 
         metrics_op   , _         = self.calculate( ds_operation, op_data       , model , cache, label="_op"  , threshold=threshold )
+
+
 
         # update everything
         for metrics in [metrics_val, metrics_train, metrics_test, metrics_op]:

@@ -8,14 +8,20 @@ from pathlib import Path
 from itertools import product
 from sklearn.model_selection import train_test_split
 from screening import DATA_DIR, TARGET_DIR
-
+from pprint import pprint
+from loguru import logger
 #
 # prepare real data
 #
 def prepare_real( dataset : str, tag : str, metadata: dict ) -> pd.DataFrame:
 
     path = DATA_DIR / f"{dataset}/{tag}/raw"
-    filepath = path / metadata["csv"]
+    logger.info(metadata)
+    try: # current key access
+        filepath = path / metadata["csv"]
+    except: # HACK: since we have files with old key access.
+        filepath = path / metadata["raw"]
+
     if not filepath.is_file():
         raise FileNotFoundError(f"File {filepath} not found.")
     
