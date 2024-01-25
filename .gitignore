@@ -133,7 +133,6 @@ dmypy.json
 
 
 # others
-*.txt
 *.pdf
 *.png
 *.xlsx
