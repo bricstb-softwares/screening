@@ -112,6 +112,12 @@ def run():
 
     dry_run = os.environ.get('JOB_DRY_RUN', 'false') == 'true'
 
+    #if dry_run:
+    #    sys.exit(0)
+
+    if os.path.exists( args.output+'/output.pkl' ):
+        sys.exit(0)
+
     try:
         job = json.load(open(args.jobs,'r'))
         test = job['test']

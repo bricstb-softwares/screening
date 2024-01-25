@@ -204,7 +204,7 @@ class crossval_table:
     #
     # Return only best inits
     #
-    def filter_sorts(self, key, idxmin=False):
+    def filter_sorts(self, table, key, idxmin=False):
         '''
         This method will filter the Dataframe based on given key in order to get the best inits for every sort.
 
@@ -213,11 +213,11 @@ class crossval_table:
         - key: the column to be used for filter.
         '''
         if idxmin:
-            idxmask = self.table.groupby(['train_tag', 'op_name', 'test'])[key].idxmin().values
-            return self.table.loc[idxmask]
+            idxmask = table.groupby(['train_tag', 'op_name', 'test'])[key].idxmin().values
+            return table.loc[idxmask]
         else:
-            idxmask = self.table.groupby(['train_tag', 'op_name','test'])[key].idxmax().values
-            return self.table.loc[idxmask]
+            idxmask = table.groupby(['train_tag', 'op_name','test'])[key].idxmax().values
+            return table.loc[idxmask]
 
 
     #
@@ -338,27 +338,106 @@ class crossval_table:
         return output
     
 
+    def get_history(self, path):
+        ituned = load_file(path)
+        history = ituned['history']
+        return history
+
+	#
+	# Plot the training curves for all sorts.
+	#
+    def plot_training_curves( self, table, best_sorts, basepath, display=False, start_epoch=0 ):
+        '''
+        This method is a shortcut to plot the monitoring traning curves.
+
+        Arguments:
+
+        - best_inits: a pandas Dataframe which contains all information for the best inits;
+        - best_sorts: a pandas Dataframe which contains all information for the best sorts;
+        - dirname: a folder to save the figures, if not exist we'll create and attached in $PWD folder;
+        - display: a boolean to decide if show or not show the plot;
+        - start_epoch: the epoch to start draw the plot.
+        '''
+        os.makedirs( basepath, exist_ok=True)
+
+        def plot_training_curves_for_each_test(table, test, best_sort , output, display=False, start_epoch=0, ):
+
+            table  = table.loc[table.test==test]
+            nsorts = len(table.sort.unique())
+            fig, ax = plt.subplots(5,2, figsize=(30,20))
+            fig.suptitle(r'Monitoring Train Plot - Test = %d'%(test), fontsize=15)
+            max_sort_per_column = 5
+            col_idx = 0; row_idx = 0
+
+            sorts = table.sort.unique()
+            sorts = sorted(sorts)
+            for sort in sorts:
+
+                current_table = table.loc[table.sort==sort]
+                path=current_table.file_name.values[0]
+                history = self.get_history( path )
+                
+                best_epoch = history['best_epoch'] - start_epoch
+                # Make the plot here
+                ax[row_idx, col_idx].set_ylabel('Loss (sort = %d)'%sort, color = 'r' if best_sort==sort else 'k')
+                ax[row_idx, col_idx].plot(history['loss'][start_epoch::], c='b', label='Train Step')
+                ax[row_idx, col_idx].plot(history['val_loss'][start_epoch::], c='r', label='Validation Step')
+                ax[row_idx, col_idx].axvline(x=best_epoch, c='k', label='Best epoch')
+                ax[row_idx, col_idx].legend()
+                ax[row_idx, col_idx].grid()
+                
+                if row_idx < max_sort_per_column - 1:
+                    row_idx+=1
+                else:
+                    row_idx=0
+                    col_idx+=1
+            
+            # ensure that last rows for each column are filled
+            ax[4, 0].set_xlabel('Epochs')
+            ax[4, 1].set_xlabel('Epochs')
+
+
+            plt.savefig(output)
+            if display:
+                plt.show()
+            else:
+                plt.close(fig)
+
+        figures = []
+       
+        for test in table.test.unique():
+            train_tag = table.train_tag.values[0]; op_name = table.op_name.values[0]
+            figurepath = basepath+'/train_evolution_%s_%s_test_%d.pdf'%(op_name, train_tag, test)
+            best_sort  = best_sorts.loc[best_sorts.test==test].sort.values[0]
+            plot_training_curves_for_each_test( table, test, best_sort, figurepath, start_epoch=start_epoch)
+            figures.append(figurepath)
+
+        return figures
 
 
 
 
-    def report( self, best_sorts , best_models, title : str , outputFile : str , color_map = {}):
 
+    def report( self, table,  best_sorts , best_models, 
+                title      : str , 
+                outputFile : str , 
+                detailed   : bool=True, 
+                color_map  : dict={} ):
 
+        color_map   = {'tight':2,'medium':1,'loose':0}
         cv_table    = self.describe( best_sorts )
         #best_models = self.best_models( best_sorts )
 
         # Default colors
         color = '\\cellcolor[HTML]{9AFF99}'
 
-        color_map = {'tight':2,'medium':1,'loose':0}
      
         def colorize( row , op_name, color, color_map ):
             if op_name in color_map.keys():
                 color_idx = color_map[op_name]
                 row[color_idx] = color + row[color_idx]
 
-
+        basedir=os.getcwd()+'/figures'
 
         # Apply beamer
         with BeamerTexReportTemplate1( theme = 'Berlin'
@@ -381,26 +460,47 @@ class crossval_table:
                     #
                     for train_tag in cv_table.train_tag.unique():
 
+                        basepath = basedir+'/'+op_name+'/'+train_tag
+                        os.makedirs( basepath, exist_ok=True)
 
                         _best_sorts = best_sorts.loc[(best_sorts.train_tag==train_tag)&(best_sorts.op_name==op_name)]
                         _best_model = best_models.loc[(best_models.train_tag==train_tag) & (best_models.op_name==op_name)]
-                        #
-                        # ROCs
-                        #
-                        figures = [
-                            self.plot_roc_curve( _best_sorts, _best_model, f'roc_{train_tag}_{op_name}.pdf'      , key='roc'     , title='Train'),
-                            self.plot_roc_curve( _best_sorts, _best_model, f'roc_{train_tag}_{op_name}_val.pdf'  , key='roc_val' , title='Val.' ),
-                            self.plot_roc_curve( _best_sorts, _best_model, f'roc_{train_tag}_{op_name}_test.pdf' , key='roc_test', title='Test' ),
-                        ]
-                        BeamerMultiFigureSlide( title = f'ROC curves for {train_tag} in {op_name} operation.'
-                                , paths = figures
-                                , nDivWidth = 3 # x
-                                , nDivHeight = 1 # y
-                                , texts=None
-                                , fortran = False
-                                , usedHeight = 0.4
-                                , usedWidth  = 1
-                                )
+
+                        if detailed:
+                            _table      = table.loc[(table.train_tag==train_tag)&(table.op_name==op_name)]
+
+                            #
+                            # Train curves
+                            #
+                            figures = self.plot_training_curves( _table, _best_sorts, basepath )
+                            for figure in figures:
+                                BeamerFigureSlide( title = f'Training curves for {train_tag} in {op_name} operation.'
+                                    , path = figure
+                                    , texts=None
+                                    , fortran = False
+                                    , usedHeight = 1
+                                    , usedWidth  = 1
+                                    )
+
+                            #
+                            # ROCs
+                            #
+                            figures = [
+                                self.plot_roc_curve( _best_sorts, _best_model, f'{basedir}/roc_{train_tag}_{op_name}.pdf'      , key='roc'     , title='Train'),
+                                self.plot_roc_curve( _best_sorts, _best_model, f'{basedir}/roc_{train_tag}_{op_name}_val.pdf'  , key='roc_val' , title='Val.' ),
+                                self.plot_roc_curve( _best_sorts, _best_model, f'{basedir}/roc_{train_tag}_{op_name}_test.pdf' , key='roc_test', title='Test' ),
+                            ]
+                            BeamerMultiFigureSlide( title = f'ROC curves for {train_tag} in {op_name} operation.'
+                                    , paths = figures
+                                    , nDivWidth = 3 # x
+                                    , nDivHeight = 1 # y
+                                    , texts=None
+                                    , fortran = False
+                                    , usedHeight = 0.4
+                                    , usedWidth  = 1
+                                    )
+
+
                         t = cv_table.loc[ (cv_table.train_tag==train_tag) & (cv_table.op_name==op_name) ]
                         #
                         # Tables
@@ -565,5 +665,136 @@ class crossval_table:
                                         else:
                                             TableLine(line, rounding = None)
 
+
+
+if __name__ == "__main__":
+
+
+    def create_op_dict( op_name, extra_suf="" ):
+
+        d = collections.OrderedDict( {
+                'max_sp'           : f'summary{extra_suf}/max_sp',
+                'auc'              : f'summary{extra_suf}/auc',
+                #'acc'              : f'summary{extra_suf}/acc',
+                #'pd'               : f'summary{extra_suf}/pd',
+                #'fa'               : f'summary{extra_suf}/fa',
+                'sens'             : f'summary{extra_suf}/sensitivity',
+                'spec'             : f'summary{extra_suf}/specificity',
+                'threshold'        : f'summary{extra_suf}/threshold',
+                'roc'              : f'summary{extra_suf}/roc',
+                'roc_val'          : f'summary{extra_suf}/roc_val',
+                'roc_op'           : f'summary{extra_suf}/roc_op',
+                'roc_test'         : f'summary{extra_suf}/roc_test',
+
+                'min_spec_sens_reached' : f'{op_name}{extra_suf}/min_spec_sens_reached',
+
+                'max_sp_val'       : f'summary{extra_suf}/max_sp_val',
+                'auc_val'          : f'summary{extra_suf}/auc_val',
+                #'acc_val'          : f'summary{extra_suf}/acc_val',
+                #'pd_val'           : f'summary{extra_suf}/pd_val',
+                #'fa_val'           : f'summary{extra_suf}/fa_val',
+                'sens_val'         : f'summary{extra_suf}/sensitivity_val',
+                'spec_val'         : f'summary{extra_suf}/specificity_val', 
+
+                'max_sp_test'      : f'summary{extra_suf}/max_sp_test',
+                'auc_test'         : f'summary{extra_suf}/auc_test',
+                #'acc_test'         : f'summary{extra_suf}/acc_test',
+                #'pd_test'          : f'summary{extra_suf}/pd_test',
+                #'fa_test'          : f'summary{extra_suf}/fa_test',
+                'sens_test'        : f'summary{extra_suf}/sensitivity_test',
+                'spec_test'        : f'summary{extra_suf}/specificity_test', 
+
+                'max_sp_op'        : f'summary{extra_suf}/max_sp_op',
+                'auc_op'           : f'summary{extra_suf}/auc_op',
+                #'acc_op'           : f'summary{extra_suf}/acc_op',
+                #'pd_op'            : f'summary{extra_suf}/pd_op',
+                #'fa_op'            : f'summary{extra_suf}/fa_op',
+                'sens_op'          : f'summary{extra_suf}/sensitivity_op',
+                'spec_op'          : f'summary{extra_suf}/specificity_op', 
+
+                'sp_index'         : f'{op_name}{extra_suf}/sp_index',
+                'sens_at'          : f'{op_name}{extra_suf}/sensitivity',
+                'spec_at'          : f'{op_name}{extra_suf}/specificity',
+                'acc_at'           : f'{op_name}{extra_suf}/acc',
+                'threshold_at'     : f'{op_name}{extra_suf}/threshold',
+
+                'sp_index_val'     : f'{op_name}{extra_suf}/sp_index_val',
+                'sens_at_val'      : f'{op_name}{extra_suf}/sensitivity_val',
+                'spec_at_val'      : f'{op_name}{extra_suf}/specificity_val',
+                #'acc_at_val'       : f'{op_name}{extra_suf}/acc_val',
+                'threshold_at_val' : f'{op_name}{extra_suf}/threshold_val',
+
+                'sp_index_test'    : f'{op_name}{extra_suf}/sp_index_test',
+                'sens_at_test'     : f'{op_name}{extra_suf}/sensitivity_test',
+                'spec_at_test'     : f'{op_name}{extra_suf}/specificity_test',
+                #'acc_at_test'      : f'{op_name}{extra_suf}/acc_test',
+                'threshold_at_test': f'{op_name}{extra_suf}/threshold_test',
+
+                'sp_index_op'      : f'{op_name}{extra_suf}/sp_index_op',
+                'sens_at_op'       : f'{op_name}{extra_suf}/sensitivity_op',
+                'spec_at_op'       : f'{op_name}{extra_suf}/specificity_op',
+                #'acc_at_op'        : f'{op_name}{extra_suf}/acc_op',
+                'threshold_at_op'  : f'{op_name}{extra_suf}/threshold_op',
+
+                'inference'        : f'{op_name}{extra_suf}/inference',
+        })
+        return d
+
+
+    extra_suf='_val'
+    #extra_suf=''
+    conf_dict = collections.OrderedDict(
+        {
+            #'loose'   : create_op_dict( 'loose'  , extra_suf=extra_suf ),
+            'medium'  : create_op_dict( 'medium' , extra_suf=extra_suf),
+            #'tight'   : create_op_dict( 'tight'  , extra_suf=extra_suf),
+        }
+    )
+    pprint(conf_dict)
+
+    models = [
+        ( 'user.philipp.gaspar.convnets.baseline.shenzhen_santacasa.exp.989f87bed5.r1'                          , 'base.sh-sc.e'        ),
+        ( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa.exp_wgan_p2p.67de4190c1.r1'               , 'alto.sh-sc.ewp'      ),
+        ( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa.exp_wgan_p2p.e540d24b4b.r1'              , 'inte.sh-sc.ewp'      ),
+        ( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa.exp_wgan_p2p_cycle.a19a3a4f8c.r1'         , 'alto.sh-sc.ewpc'     ),
+        ( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa.exp_wgan_p2p_cycle.a19a3a4f8c.r1'        , 'inte.sh-sc.ewpc'     ),
+    ]
+    models_plus_manaus = [
+        # plus manaus
+        ( 'user.philipp.gaspar.convnets.baseline.shenzhen_santacasa_manaus.exp.ffe6cbee11.r1'                   , 'base.sh-sc-ma.e'     ),
+        ( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa_manaus.exp_wgan_p2p.0d13030165.r1'        , 'alto.sh-sc-ma.ewp'   ),
+        ( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa_manaus.exp_wgan_p2p.ac79954ba0.r1'       , 'inte.sh-sc-ma.ewp'   ),
+        ( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa_manaus.exp_wgan_p2p_cycle.c5143abd1b.r1'  , 'alto.sh-sc-ma.ewpc'  ),
+        ( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa_manaus.exp_wgan_p2p_cycle.c5143abd1b.r1' , 'inte.sh-sc-ma.ewpc'  ),
+    ]
+
+    basepath='/mnt/brics_data/models'
+
+    for path, train_tag in models+models_plus_manaus:
+        cv = crossval_table( conf_dict )
+        cv.fill( basepath+'/'+path , train_tag )
+        table = cv.table
+        best_sorts = cv.filter_sorts( table,      'sp_index_op'    )
+        best_tests = cv.filter_tests( best_sorts, 'sp_index_test' )
+        cv.report(table, best_sorts, best_tests, train_tag, train_tag )
+
+    
+    cv = crossval_table( conf_dict )
+    for path, train_tag in models:
+        cv.fill( basepath+'/'+path , train_tag )
+    table      = cv.table
+    best_sorts = cv.filter_sorts( table,      'sp_index_op'    )
+    best_tests = cv.filter_tests( best_sorts, 'sp_index_test' )
+    cv.report(table, best_sorts, best_tests, 'shenzhen_santacasa', 'shenzhen_santacasa' , detailed=False)
+  
+
+    cv = crossval_table( conf_dict )
+    for path, train_tag in models_plus_manaus:
+        cv.fill( basepath+'/'+path , train_tag )
+    table      = cv.table
+    best_sorts = cv.filter_sorts( table,      'sp_index_op'    )
+    best_tests = cv.filter_tests( best_sorts, 'sp_index_test' )
+    cv.report(table, best_sorts, best_tests, 'shenzhen_santacasa_manaus', 'shenzhen_santacasa_manaus' , detailed=False )
+  
 
 

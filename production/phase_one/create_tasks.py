@@ -85,7 +85,7 @@ create_task( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa.exp_wg
 # shenzhen (exp) + santa casa (exp) + manaus (exp)
 create_task( 'user.philipp.gaspar.convnets.baseline.shenzhen_santacasa_manaus.exp.ffe6cbee11.r1'    , train_path+'/TrainBaseline_ffe6cbee11', dry_run=dry_run ) 
 # shenzhen (exp, wgan, p2p) + santa casa (exp, wgan, p2p) + manaus (exp, wgan, p2p)
-create_task( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa_manaus.exp_wgan_p2p.ac79954ba0.r1' , train_path+'/TrainIntereaved_ac79954ba0', dry_run=dry_run )
+create_task( 'user.philipp.gaspar.convnets.interleaved.shenzhen_santacasa_manaus.exp_wgan_p2p.ac79954ba0.r1' , train_path+'/TrainInterleaved_ac79954ba0', dry_run=dry_run )
 # shenzhen (exp, wgan, p2p) + santa casa (exp, wgan, p2p) + manaus (exp, wgan, p2p)
 create_task( 'user.philipp.gaspar.convnets.altogether.shenzhen_santacasa_manaus.exp_wgan_p2p.0d13030165.r1'  , train_path+'/TrainAltogether_0d13030165', dry_run=dry_run ) 
 # shenzhen (exp, wgan, p2p, cycle) + santa casa (exp, wgan, p2p, cycle) + manaus (exp, wgan, p2p, cycle)

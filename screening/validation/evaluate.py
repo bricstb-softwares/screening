@@ -16,9 +16,6 @@ import screening.utils.convnets as convnets
 from screening import DATA_DIR
 
 
-class EvaluationFlags:
-    set_by_valid = False
-    out_of_sample_datasets = ['russia', 'caxias', 'indonesia']
 
 
 
