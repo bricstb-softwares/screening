@@ -30,11 +30,14 @@ from screening.utils.convnets import (
     save_job_state,
     build_model_from_job,
     build_model_from_train_state,
-    split_dataframe,
     train_altogether,
     train_fine_tuning,
     train_interleaved,
     train_neural_net,
+)
+
+from screening.utils.data import (
+    split_dataframe,
 )
 from screening.validation import (
     evaluate

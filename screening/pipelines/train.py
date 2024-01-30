@@ -141,6 +141,10 @@ class BaselineFineTuningPipeline(luigi.WrapperTask):
 
 
 
+#
+# NOTE: Need to include SVM here
+#
+
 
 processes = {
             "baseline"              : BaselinePipeline,

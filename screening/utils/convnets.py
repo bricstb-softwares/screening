@@ -1,6 +1,5 @@
 __all__ = [
     # dataset build
-    "split_dataframe",
     "build_dataset",
     "build_altogether_dataset",
     "build_interleaved_dataset",
@@ -39,40 +38,6 @@ from tensorflow.keras.models import model_from_json
 # dataset preparation
 #
 
-def split_dataframe(df, fold, inner_fold, type_set):
-    # type: (pd.DataFrame, int, int, str) -> pd.DataFrame
-    if type_set == "train_real":
-        res = df[
-            (df["type"] == "real")
-            & (df["set"] == "train")
-            & (df["fold"] == fold)
-            & (df["inner_fold"] == inner_fold)
-        ]
-    elif type_set == "valid_real":
-        res = df[
-            (df["type"] == "real")
-            & (df["set"] == "val")
-            & (df["fold"] == fold)
-            & (df["inner_fold"] == inner_fold)
-        ]
-    elif type_set == "train_fake":
-        res = df[
-            (df["type"] == "fake")
-            & (df["set"] == "train")
-            & (df["fold"] == fold)
-            & (df["inner_fold"] == inner_fold)
-        ]
-    elif type_set == "test_real":
-        res = df[
-            (df["type"] == "real")
-            & (df["set"] == "test")
-            & (df["fold"] == fold)
-            & (df["inner_fold"] == inner_fold)
-        ]
-    else:
-        raise NotImplementedError(f"Type set '{type_set}' not implemented.")
-
-    return res[["source", "path", "label"]]
 
 
 def build_dataset(df, image_shape, batch_size):

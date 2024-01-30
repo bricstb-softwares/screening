@@ -1,4 +1,7 @@
-__all__ = ["prepare_data"]
+__all__ = [
+    "prepare_data",
+    "split_dataframe",
+]
 
 import os, sys
 import numpy as np
@@ -10,6 +13,46 @@ from sklearn.model_selection import train_test_split
 from screening import DATA_DIR, TARGET_DIR
 from pprint import pprint
 from loguru import logger
+
+
+
+def split_dataframe(df, fold, inner_fold, type_set):
+    # type: (pd.DataFrame, int, int, str) -> pd.DataFrame
+    if type_set == "train_real":
+        res = df[
+            (df["type"] == "real")
+            & (df["set"] == "train")
+            & (df["fold"] == fold)
+            & (df["inner_fold"] == inner_fold)
+        ]
+    elif type_set == "valid_real":
+        res = df[
+            (df["type"] == "real")
+            & (df["set"] == "val")
+            & (df["fold"] == fold)
+            & (df["inner_fold"] == inner_fold)
+        ]
+    elif type_set == "train_fake":
+        res = df[
+            (df["type"] == "fake")
+            & (df["set"] == "train")
+            & (df["fold"] == fold)
+            & (df["inner_fold"] == inner_fold)
+        ]
+    elif type_set == "test_real":
+        res = df[
+            (df["type"] == "real")
+            & (df["set"] == "test")
+            & (df["fold"] == fold)
+            & (df["inner_fold"] == inner_fold)
+        ]
+    else:
+        raise NotImplementedError(f"Type set '{type_set}' not implemented.")
+
+    return res[["source", "path", "label"]]
+
+
+
 #
 # prepare real data
 #
