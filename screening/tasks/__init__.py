@@ -13,6 +13,3 @@ from . import convnets
 __all__.extend( convnets.__all__ )
 from .convnets import *
 
-from . import report
-__all__.extend( report.__all__ )
-from .report import *

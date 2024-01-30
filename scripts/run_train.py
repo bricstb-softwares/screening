@@ -4,7 +4,7 @@
 import argparse, json, os, sys, traceback, luigi
 import tensorflow as tf 
 
-from screening.pipelines import processes
+from screening.pipelines.convnets import processes
 
 def run():
     
