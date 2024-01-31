@@ -130,55 +130,6 @@ class TrainCNN(Task):
 
 
 
-    def log_params(self):
-        self.set_logger()
-
-        logger.info(f"=== Start '{self.__class__.__name__}' ===\n")
-        logger.info("Dataset Info:")
-        task_params = self.__dict__["param_kwargs"].copy()
-
-        for dataset in task_params["dataset_info"]:
-            tag = task_params["dataset_info"][dataset]["tag"]
-            sources = sorted(task_params["dataset_info"][dataset]["sources"].keys())
-            logger.info(f"{dataset}")
-            logger.info(f" - tag: {tag}")
-            logger.info(f" - sources: {sources}")
-        logger.info("\n")
-
-        logger.info("Training Parameters:")
-        for key in task_params:
-            if key == "dataset_info":
-                continue
-            logger.info(f" - {key}: {task_params[key]}")
-        logger.info("")
-        
-        logger.info(f"Experiment hash: {self.get_hash()}")
-        logger.info("")
-
-        return task_params
-
-    def get_data_samples(self, tasks, seed : int=42):
-        data_list = []
-        for task in tasks:
-            if type(task) == CrossValidation:
-                data_list.append(pd.read_parquet(task.output().path))
-        data = pd.concat(data_list)
-        data = data.sample(frac=1, random_state=seed)
-        return data
-
-
-    def get_sorts(self):
-        job_params = self.get_job_params()  
-        return list(range(9)) if not job_params else [job_params['sort']]
-
-    def get_tests(self):
-        job_params = self.get_job_params()  
-        return list(range(10)) if not job_params else [job_params['test']]
-
-
-
-
-
 #
 # Train methods
 #
