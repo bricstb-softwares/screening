@@ -1,21 +1,7 @@
 
 
 
-__all__ = [
-    # dataset build
-    "build_dataset",
-    "build_altogether_dataset",
-    "build_interleaved_dataset",
-    # model
-    "create_cnn",
-    "prepare_model",
-    # save
-    "save_job_state",
-    "save_train_state",
-    # loaders
-    "build_model_from_job",
-    "build_model_from_train_state",
-]
+__all__ = []
 
 
 
@@ -29,13 +15,7 @@ import tensorflow as tf
 from dataclasses import dataclass
 from pathlib import Path
 from loguru import logger
-from tensorflow.python.keras import layers
-from tensorflow.python.keras.metrics import AUC, BinaryAccuracy, Precision, Recall
-from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.optimizers import adam_v2
-from tensorflow.keras.models import model_from_json
-
-
+from sklearn.svm import OneClassSVM
 
 #
 # dataset preparation
@@ -74,15 +54,13 @@ def build_dataset(df, image_shape, batch_size):
 
 @dataclass
 class SVMState:
-    model_sequence  : dict 
-    model_weights   : list
+    model           : object 
     history         : dict
     parameters      : dict
     
 
-def prepare_model(model, history, params):
-    # type: (tf.python.keras.models.Sequential, dict, dict) -> ConvNetState
-    train_state = ConvNetState(json.loads(model.to_json()), model.get_weights(), history, params)
+def prepare_model(model, history, params ):
+    train_state = SVMState(model, history, params)
     return train_state
 
 
@@ -93,7 +71,7 @@ def prepare_model(model, history, params):
 
 # as task 
 def save_train_state(output_path : str, train_state : str, tar : bool=False):
-    # type: (Path, ConvNetState) -> None
+
     if not output_path.exists():
         output_path.mkdir(parents=True)
 
@@ -105,8 +83,7 @@ def save_train_state(output_path : str, train_state : str, tar : bool=False):
                 getattr(train_state, attribute_name), file, pickle.HIGHEST_PROTOCOL
             )
         filepaths.append(path)
-
-    _save_pickle("model_weights")
+    _save_pickle("model")
     _save_pickle("history")
     _save_pickle("parameters")
 
@@ -117,25 +94,26 @@ def save_train_state(output_path : str, train_state : str, tar : bool=False):
                 tar.add(filepath)
 
 
-# as job
+#
+# save as job version 1 format
+#
 def save_job_state( path            : str, 
-                    train_state     : ConvNetState, 
+                    train_state     : SVMState, 
                     test            : int,
                     sort            : int,
                     metadata        : dict={},
-                    version         : int=1  # version one should be default for the phase one project
+                    version         : int=1,  # version one should be default for the phase one project
+                    name            : str='oneclass-svm', # default name for this strategy
                 ):
     
     # NOTE: version will be used to configure the pre-processing function during the load inference
     metadata.update({'test':test, 'sort':sort})
     d = {
-            'model': {
-                'weights'   : train_state.model_weights, 
-                'sequence'  : train_state.model_sequence,
-            },
+            'model'       : train_state.model
             'history'     : train_state.history,
             'metadata'    : metadata,
             '__version__' : version
+            '__name__'    : name
         }
 
     with open(path, 'wb') as file:
@@ -154,40 +132,34 @@ def build_model_from_train_state( train_state ):
     if type(train_state) == str:
         # load weights  
         model_path = train_state
-        weights_path = os.path.join(model_path, "model_weights.pkl")
-        weights      = pickle.load( open(weights_path, 'rb') )
-        # load params
+        model = os.path.join(model_path, "model_vectors.pkl")
+        # load parameters
         params_path  = os.path.join(model_path, "parameters.pkl")
         model_params = pickle.load( open(params_path, 'rb' ))
-        # build model
-        image_shape  = model_params["image_shape"]
-        model        = create_cnn(image_shape)
-        model.set_weights(weights)
         # load history
         history_path = os.path.join(model_path, 'history.pkl')
         history      = pickle.load(open(history_path, 'rb'))
         return model, history, model_params
-
     else:
-        # get the model sequence
-        sequence = train_state.model_sequence
-        weights  = train_state.model_weights
-        model = model_from_json( json.dumps(sequence, separators=(',', ':')) )
-        # load the weights
-        model.set_weights(weights)
-        return model, train_state.history, train_state.parameters
+        return train_state.model, train_state.history, train_state.parameters
 
-def build_model_from_job( job_path ):
+
+
+def build_model_from_job( job_path , name='oneclass-svm'):
 
     with open( job_path, 'r') as f:
-        sequence = f['model']['sequence']
-        weights  = f['model']['weights']
-        history  = f['history']
-        params   = f['params']
-        # build model
-        model = model_from_json( json.dumps(sequence, separators=(',', ':')) )
-        model.set_weights(weights)
-        return model, history, params
+        if name != f['__name__']:
+            version = f['__version__']
+            if version == 1: # Load the job data as version one
+                model    = f['model']
+                history  = f['history']
+                params   = f['params']
+                return model, history, params
+            else:
+                raise RuntimeError(f"version {version} not supported.")
+        else:
+            raise RuntimeError(f"job file name as {f['__name__']} not supported.")
+
 
 
 
@@ -202,37 +174,18 @@ def train_svm(df_train, df_valid, params):
     if "image_shape" not in list(params.keys()):
         params["image_shape"] = [params["image_width"], params["image_height"]]
 
-    ds_train = build_dataset(df_train, params["image_shape"], params["batch_size"])
-    ds_valid = build_dataset(df_valid, params["image_shape"], params["batch_size"])
+    #ds_train = build_dataset(df_train, params["image_shape"], params["batch_size"])
+    #ds_valid = build_dataset(df_valid, params["image_shape"], params["batch_size"])
 
-    tf.keras.backend.clear_session()
-    optimizer = adam_v2.Adam(params["learning_rate"])
-    tf_metrics = [
-        BinaryAccuracy(name="acc"),
-        AUC(name="auc"),
-        Precision(name="precision"),
-        Recall(name="recall"),
-    ]
+    # train SVM
+    model = None
+    # get history 
+    history = {} # NOTE if not available, you should put an empty dict
 
-    model = create_cnn(params["image_shape"])
-    model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=tf_metrics)
-
-    early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=10, restore_best_weights=True
-    )
-
-    history = model.fit(
-        ds_train,
-        epochs=2,#params["epochs"],
-        validation_data=ds_valid,
-        callbacks=[early_stop],
-        verbose=1,
-    )
-    history.history["best_epoch"] = early_stop.best_epoch
 
     train_state = prepare_model(
         model=model,
-        history=history.history,
+        history=history,
         params=params,
     )
 

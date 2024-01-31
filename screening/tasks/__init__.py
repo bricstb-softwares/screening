@@ -9,7 +9,4 @@ from . import data
 __all__.extend( data.__all__ )
 from .data import *
 
-from . import convnets
-__all__.extend( convnets.__all__ )
-from .convnets import *
 

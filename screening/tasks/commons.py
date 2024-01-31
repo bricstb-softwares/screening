@@ -44,9 +44,6 @@ class Task(LuigiTask):
         )
 
 
-
-
-
     def log_params(self):
         self.set_logger()
 
@@ -92,4 +89,7 @@ class Task(LuigiTask):
         job_params = self.get_job_params()  
         return list(range(10)) if not job_params else [job_params['test']]
 
-
+    def output(self) -> luigi.LocalTarget:
+        file_name = "output.pkl" if self.get_job_params() else "task_params.pkl"
+        output_file = Path(self.get_output_path()) / file_name
+        return luigi.LocalTarget(str(output_file))

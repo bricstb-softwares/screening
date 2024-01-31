@@ -39,7 +39,7 @@ from screening.validation import (
 class TrainSVM(Task):
 
     dataset_info  = luigi.DictParameter()
-    epochs        = luigi.IntParameter()
+    max_inter     = luigi.IntParameter()
     image_width   = luigi.IntParameter()
     image_height  = luigi.IntParameter()
     grayscale     = luigi.BoolParameter()
@@ -47,11 +47,6 @@ class TrainSVM(Task):
 
 
   
-    def output(self) -> luigi.LocalTarget:
-        file_name = "output.pkl" if self.get_job_params() else "task_params.pkl"
-        output_file = Path(self.get_output_path()) / file_name
-        return luigi.LocalTarget(str(output_file))
-
 
     def requires(self) -> list[CrossValidation]:
         required_tasks = []
@@ -101,7 +96,7 @@ class TrainSVM(Task):
                         }
                     )
             else:
-                output_path = experiment_path/f"cnn_fold{test}/sort{sort}/" 
+                output_path = experiment_path/f"svm_fold{test}/sort{sort}/" 
                 save_train_state(output_path, train_state)
 
         end = default_timer()
@@ -113,55 +108,6 @@ class TrainSVM(Task):
         if not job_params:
             with open(self.output().path, "wb") as file:
                 pickle.dump(task_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-
-
-    def log_params(self):
-        self.set_logger()
-
-        logger.info(f"=== Start '{self.__class__.__name__}' ===\n")
-        logger.info("Dataset Info:")
-        task_params = self.__dict__["param_kwargs"].copy()
-
-        for dataset in task_params["dataset_info"]:
-            tag = task_params["dataset_info"][dataset]["tag"]
-            sources = sorted(task_params["dataset_info"][dataset]["sources"].keys())
-            logger.info(f"{dataset}")
-            logger.info(f" - tag: {tag}")
-            logger.info(f" - sources: {sources}")
-        logger.info("\n")
-
-        logger.info("Training Parameters:")
-        for key in task_params:
-            if key == "dataset_info":
-                continue
-            logger.info(f" - {key}: {task_params[key]}")
-        logger.info("")
-        
-        logger.info(f"Experiment hash: {self.get_hash()}")
-        logger.info("")
-
-        return task_params
-
-    def get_data_samples(self, tasks, seed : int=42):
-        data_list = []
-        for task in tasks:
-            if type(task) == CrossValidation:
-                data_list.append(pd.read_parquet(task.output().path))
-        data = pd.concat(data_list)
-        data = data.sample(frac=1, random_state=seed)
-        return data
-
-
-    def get_sorts(self):
-        job_params = self.get_job_params()  
-        return list(range(9)) if not job_params else [job_params['sort']]
-
-    def get_tests(self):
-        job_params = self.get_job_params()  
-        return list(range(10)) if not job_params else [job_params['test']]
-
 
 
 
@@ -203,5 +149,4 @@ class TrainSynthetic(TrainCNN):
 
         end = default_timer()
         logger.info(f"training toke {timedelta(seconds=(end - start))}...")
-
         return train_state

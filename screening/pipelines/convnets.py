@@ -1,8 +1,8 @@
 
-__all__ = ["processes"]
+__all__ = []
 
 import luigi
-from screening.tasks import (
+from screening.tasks.convnets import (
     TrainAltogether,
     TrainBaseline,
     TrainBaselineFineTuning,

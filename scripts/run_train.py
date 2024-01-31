@@ -3,8 +3,7 @@
 
 import argparse, json, os, sys, traceback, luigi
 import tensorflow as tf 
-
-from screening.pipelines.convnets import processes
+from screening.pipelines import get_task
 
 def run():
     
@@ -66,7 +65,9 @@ def run():
             task_params["job"] = {}
 
         
-        pipeline = [processes[args.process_name](**task_params)]
+        train_name = task_params['train_name']
+        task = get_task( train_name, args.process_name )
+        pipeline = [task(**task_params)]
         luigi.build(pipeline, workers=1, local_scheduler=True)
         sys.exit(0)
 
