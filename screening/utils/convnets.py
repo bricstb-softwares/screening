@@ -176,7 +176,8 @@ def save_job_state( path            : str,
                     test            : int,
                     sort            : int,
                     metadata        : dict={},
-                    version         : int=1  # version one should be default for the phase one project
+                    version         : int=1,  # version one should be default for the phase one project
+                    name            : str='convnet',
                 ):
     
     # NOTE: version will be used to configure the pre-processing function during the load inference
@@ -188,7 +189,8 @@ def save_job_state( path            : str,
             },
             'history'     : train_state.history,
             'metadata'    : metadata,
-            '__version__' : version
+            '__version__' : version,
+            '__name__'    : name,
         }
 
     with open(path, 'wb') as file:
@@ -233,14 +235,22 @@ def build_model_from_train_state( train_state ):
 def build_model_from_job( job_path ):
 
     with open( job_path, 'r') as f:
-        sequence = f['model']['sequence']
-        weights  = f['model']['weights']
-        history  = f['history']
-        params   = f['params']
-        # build model
-        model = model_from_json( json.dumps(sequence, separators=(',', ':')) )
-        model.set_weights(weights)
-        return model, history, params
+
+        if f["__name__"] == name:
+            version = f["__version__"]
+            if version == 1:
+                sequence = f['model']['sequence']
+                weights  = f['model']['weights']
+                history  = f['history']
+                params   = f['params']
+                # build model
+                model = model_from_json( json.dumps(sequence, separators=(',', ':')) )
+                model.set_weights(weights)
+                return model, history, params
+            else:
+                raise RuntimeError(f"version {version} not supported.")
+        else:
+            raise RuntimeError(f"job file name as {f['__name__']} not supported.")
 
 
 
@@ -276,7 +286,7 @@ def train_neural_net(df_train, df_valid, params):
 
     history = model.fit(
         ds_train,
-        epochs=2,#params["epochs"],
+        epochs=params["epochs"],
         validation_data=ds_valid,
         callbacks=[early_stop],
         verbose=1,

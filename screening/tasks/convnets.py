@@ -32,7 +32,7 @@ from screening.utils.convnets import (
 from screening.utils.data import (
     split_dataframe,
 )
-from screening.validation import (
+from screening.validation.evaluate import (
     evaluate
 )
 
