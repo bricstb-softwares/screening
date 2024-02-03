@@ -2,8 +2,6 @@ from __future__ import annotations
 
 __all__ = []
 
-
-
 import pickle
 import luigi
 import numpy as np
@@ -15,7 +13,6 @@ from itertools import product
 from pathlib import Path
 from timeit import default_timer
 from loguru import logger
-
 
 from screening.tasks import Task, CrossValidation
 from screening.utils.svm import (
@@ -32,7 +29,6 @@ from screening.validation import (
     evaluate
 )
 
-
 #
 # Base SVM class
 #
@@ -44,9 +40,6 @@ class TrainSVM(Task):
     image_height  = luigi.IntParameter()
     grayscale     = luigi.BoolParameter()
     job           = luigi.DictParameter(default={}, significant=False)
-
-
-  
 
     def requires(self) -> list[CrossValidation]:
         required_tasks = []
@@ -130,11 +123,11 @@ class TrainBaseline(TrainSVM):
         train_state = evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
-        logger.info(f"training toke {timedelta(seconds=(end - start))}...")
+        logger.info(f"training took {timedelta(seconds=(end - start))}...")
         return train_state
 
        
-class TrainSynthetic(TrainCNN):
+class TrainSynthetic(TrainSVM):
 
     def fit(self, data, test, sort, task_params ):
 
@@ -148,5 +141,25 @@ class TrainSynthetic(TrainCNN):
         train_state = evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
-        logger.info(f"training toke {timedelta(seconds=(end - start))}...")
+        logger.info(f"training took {timedelta(seconds=(end - start))}...")
+        return train_state
+    
+    
+class TrainAltogether(TrainSVM):
+
+    def fit(self, data, test, sort, task_params ):
+
+        start = default_timer()
+
+        train_real  = split_dataframe(data, test, sort, "train_real")
+        train_fake  = split_dataframe(data, test, sort, "train_fake")
+        valid_real  = split_dataframe(data, test, sort, "valid_real")
+        test_real   = split_dataframe(data, test, sort, "test_real" )
+
+        train_real_fake = pd.concat([train_real, train_fake])
+        train_state = train_svm(train_real_fake, valid_real, task_params)
+        train_state = evaluate( train_real_fake, train_fake, valid_real, test_real)
+
+        end = default_timer()
+        logger.info(f"training took {timedelta(seconds=(end - start))}...")
         return train_state
