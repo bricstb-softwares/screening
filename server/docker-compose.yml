@@ -14,5 +14,5 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ${STORAGE_PATH}:/mnt/brics_data
+      - ${DOCKER_STORAGE}:/mnt/brics_data
       
