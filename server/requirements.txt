@@ -6,9 +6,11 @@ pydicom
 expand-folders
 tqdm
 pandarallel
-gradio
-fastapi
-typing_extensions==4.7.1
+gradio==4.16.0
+fastapi==0.103.2 
 tensorflow-gpu==2.11.0
+typing_extensions==4.7.1
+loguru
+luigi
 
 
