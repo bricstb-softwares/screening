@@ -182,6 +182,6 @@ app = gr.mount_gradio_app(app, demo, path="/inference")
 
 if __name__ == "__main__":
     logger.info("Starting server...")
-    demo.launch(enable_queue=True, share=True,
+    demo.launch(share=True,
                 server_name="0.0.0.0", server_port=9000)
    
