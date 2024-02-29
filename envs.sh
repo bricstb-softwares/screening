@@ -13,6 +13,7 @@ export GIT_SOURCE_COMMIT=$(git rev-parse HEAD)
 
 # lab storage environs
 export PROJECT_DIR=/mnt/brics_data
+export DOCKER_STORAGE=$PROJECT_DIR
 
 # output 
 export TARGET_DIR=$PWD/targets
