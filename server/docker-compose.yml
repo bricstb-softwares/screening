@@ -12,4 +12,4 @@ services:
       - "9000:9000"
     volumes:
       - ${DOCKER_STORAGE}:/mnt/brics_data
-      
+    restart: always
