@@ -1,8 +1,12 @@
 {
-    "batch_size": 32, 
-    "epochs": 100, 
-    "learning_rate": 0.001, 
-    "image_width": 256, 
-    "image_height": 256, 
-    "grayscale": false
+    "batch_size"    : 32, 
+    "epochs"        : 1000, 
+    "learning_rate" : 0.001, 
+    "image_width"   : 256, 
+    "image_height"  : 256, 
+    "grayscale"     : false,
+    "min_epochs"    : 10,
+    "patience"      : 50,
+    "model_version" : 1,
+    "model_name"    : "convnet"
 }

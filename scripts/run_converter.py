@@ -10,14 +10,15 @@ from loguru import logger
 from screening.utils import commons
 from screening.utils.data import prepare_data
 from screening.utils.convnets import (
-    split_dataframe,
     prepare_model,
     build_model_from_train_state,
     save_job_state,
 )
-from screening.validation import (
+from screening.validation.evaluate import (
     evaluate,
 )
+
+from screening.utils.data import split_dataframe
 
 
 def convert_experiment_to_task( experiment_path : str, output_path : str, test : int, sort : int , seed=42):
@@ -112,8 +113,8 @@ def run():
 
     dry_run = os.environ.get('JOB_DRY_RUN', 'false') == 'true'
 
-    #if dry_run:
-    #    sys.exit(0)
+    if dry_run:
+        sys.exit(0)
 
     if os.path.exists( args.output+'/output.pkl' ):
         sys.exit(0)

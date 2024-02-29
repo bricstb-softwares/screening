@@ -4,14 +4,16 @@
 import argparse, json, os, sys, traceback, luigi
 import tensorflow as tf 
 from screening.pipelines import get_task
+from loguru import logger
 
 def run():
     
-    physical_devices = tf.config.list_physical_devices('GPU')
-    if len(physical_devices)>0:
-        tf.config.experimental.set_memory_growth(physical_devices[0], True)
-
+ 
     parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--model_name", "-m", help="Name of the model.", required=True
+    )
     parser.add_argument(
         "--process_name", "-p", help="Name of the process.", required=True
     )
@@ -46,6 +48,18 @@ def run():
 
     try: 
 
+        dry_run      = os.environ.get("JOB_DRY_RUN", "false")=="true"
+        job_basepath = os.environ.get("JOB_WORKAREA", os.getcwd())
+        job_output   = job_basepath+'/output.pkl'
+
+        physical_devices = tf.config.list_physical_devices('GPU')
+        if len(physical_devices)>0:
+            logger.info("GPU available!")
+            tf.config.experimental.set_memory_growth(physical_devices[0], True)
+            tf.config.run_functions_eagerly(False)
+        else:
+            logger.warning("only CPU available.")
+
         with open(args.dataset_info, "rt") as file:
             d_args = argparse.Namespace()
             d_args.__dict__.update(json.load(file))
@@ -64,11 +78,29 @@ def run():
         else:
             task_params["job"] = {}
 
-        
-        train_name = task_params['train_name']
-        task = get_task( train_name, args.process_name )
+   
+
+        model_name = task_params.pop("model_name")
+        task       = get_task(model_name, args.process_name )
+
+        if dry_run:
+            if "epochs" in task_params.keys():
+                logger.info("setting epochs to 5 since this is a dry_run job.")
+                task_params["epochs"]=5
+
+            if os.path.exists(job_output):
+                logger.info(f"removing {job_output} since this is a dry_run job.")
+                os.system(f"rm -rf {job_output}")
+            
+
         pipeline = [task(**task_params)]
         luigi.build(pipeline, workers=1, local_scheduler=True)
+        
+        if dry_run:
+            if os.path.exists(job_output):
+                logger.info(f"removing {job_output} since this is a dry_run job.")
+                os.system(f"rm -rf {job_output}")
+            
         sys.exit(0)
 
     except  Exception as e:

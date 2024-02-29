@@ -1,10 +1,9 @@
 jupyterlab
-scikit-learn==1.0.2
-pandas==1.4.1
-luigi==3.0.3
-matplotlib==3.5.1
-pyarrow==11.0.0
-tensorflow-gpu==2.10.0
+scikit-learn
+pandas
+luigi
+matplotlib
+pyarrow
 pydicom
 expand-folders
 maestro @ git+https://github.com/jodafons/maestro.git@main
@@ -13,3 +12,10 @@ pybeamer @git+https://github.com/jodafons/pybeamer.git@main
 atlas_mpl_style
 tqdm
 pandarallel
+gradio
+fastapi
+tensorflow-gpu==2.11.0
+torch 
+torchvision 
+torchaudio
+

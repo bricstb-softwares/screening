@@ -169,7 +169,7 @@ def get_context():
 
 with gr.Blocks(theme="freddyaboulton/test-blue") as demo:
     context  = gr.State(get_context())
-    gr.Label(f"CAD System", show_label=False)
+    gr.Label(f"CAD System (Amostra Gratis)", show_label=False)
     inference_tab(context, name='Inference')
     gr.Label("An initiative of the BRICS/UFRJ groups." , show_label=False)
 

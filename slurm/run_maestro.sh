@@ -3,10 +3,10 @@
 # change this parameters
 #
 partition=gpu-large
-reservation=joao.pinto_3
+reservation=joao.pinto_4
 #target_path=/home/$USER/public
 target_path=/home/joao.pinto/git_repos
-max_procs=2
+max_procs=4
 database_server_url=$POSTGRES_SERVER_URL # this is my postgres URL
 
 

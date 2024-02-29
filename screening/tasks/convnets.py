@@ -46,6 +46,9 @@ class TrainCNN(Task):
     batch_size    = luigi.IntParameter()
     epochs        = luigi.IntParameter()
     learning_rate = luigi.IntParameter()
+    patience      = luigi.IntParameter()
+    min_epochs    = luigi.IntParameter()
+    model_version = luigi.IntParameter()
     image_width   = luigi.IntParameter()
     image_height  = luigi.IntParameter()
     grayscale     = luigi.BoolParameter()
@@ -169,10 +172,10 @@ class TrainInterleaved(TrainCNN):
     def fit(self, data, test, sort, task_params ):
         start = default_timer()
 
-        train_fake = split_dataframe(data, i, j, "train_fake")
-        train_real = split_dataframe(data, i, j, "train_real")
-        valid_real = split_dataframe(data, i, j, "valid_real")
-        test_real  = split_dataframe(data, i, j, "test_real" )
+        train_fake = split_dataframe(data, test, sort, "train_fake")
+        train_real = split_dataframe(data, test, sort, "train_real")
+        valid_real = split_dataframe(data, test, sort, "valid_real")
+        test_real  = split_dataframe(data, test, sort, "test_real" )
         train_state = train_interleaved(
             train_real, train_fake, valid_real, task_params
         )
@@ -239,14 +242,17 @@ class TrainBaselineFineTuning(TrainCNN):
             baseline_info[dataset]["sources"] = sources
 
         baseline_train = TrainBaseline(
-            dataset_info=baseline_info,
-            batch_size=self.batch_size,
-            epochs=self.epochs,
-            learning_rate=self.learning_rate,
-            image_width=self.image_width,
-            image_height=self.image_height,
-            grayscale=self.grayscale,
-            job_params=self.job_params,
+            dataset_info    = baseline_info,
+            batch_size      = self.batch_size,
+            epochs          = self.epochs,
+            learning_rate   = self.learning_rate,
+            patience        = self.patience,
+            min_epochs      = self.min_epochs,
+            model_version   = self.model_version,
+            image_width     = self.image_width,
+            image_height    = self.image_height,
+            grayscale       = self.grayscale,
+            job_params      = self.job_params,
         )
 
         required_tasks = [baseline_train]

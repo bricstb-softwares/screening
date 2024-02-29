@@ -13,10 +13,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from loguru import logger
 from tensorflow.python.keras import layers
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.python.keras.layers import Conv2D, Dense, Dropout, Flatten, MaxPooling2D
 from tensorflow.python.keras.metrics import AUC, BinaryAccuracy, Precision, Recall
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.optimizers import adam_v2
 from tensorflow.keras.models import model_from_json
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 
 
@@ -27,22 +30,18 @@ from tensorflow.keras.models import model_from_json
 
 
 def build_dataset(df, image_shape, batch_size):
-    # type: (pd.DataFrame, list[int], int) -> tf.data.Dataset
-    def _decode_image(path, label, image_shape, channels=3):
-        # type: (str, int, list[int], int) -> T.Union[list, int]
-        image_encoded = tf.io.read_file(path)
-        image = tf.io.decode_jpeg(image_encoded, channels=channels)
-        image = tf.image.convert_image_dtype(image, tf.float32)
-        image = tf.image.resize(image, image_shape)
-        label = tf.cast(label, tf.int32)
-        return image, label
+   
+    datagen = ImageDataGenerator( rescale=1./255 )
+    generator = datagen.flow_from_dataframe(df, directory = None,
+                                            x_col = 'image_path', 
+                                            y_col = 'target',
+                                            batch_size = batch_size,
+                                            target_size = image_shape, 
+                                            class_mode = 'raw', 
+                                            shuffle = True,
+                                            color_mode = 'grayscale')
 
-    ds_path = tf.data.Dataset.from_tensor_slices(df["path"])
-    ds_label = tf.data.Dataset.from_tensor_slices(df["label"])
-    ds = tf.data.Dataset.zip((ds_path, ds_label))
-    ds = ds.map(lambda p, l: _decode_image(p, l, image_shape))
-    ds = ds.batch(batch_size, drop_remainder=False)
-    return ds
+    return generator
 
 
 def build_interleaved_dataset(df_real, df_fake, image_shape, batch_size):
@@ -88,41 +87,65 @@ def build_altogether_dataset(df, image_shape, batch_size):
 #
 # model preparation
 #
+def create_cnn(image_shape,version=1):
 
-
-def create_cnn(image_shape):
-    # type: (list[int]) -> tf.python.keras.models.Sequential
+    logger.info(f"Builing model {version}...")
     model = Sequential()
-    model.add(
-        layers.Conv2D(
-            filters=32,
-            kernel_size=(3, 3),
-            activation="relu",
-            input_shape=(image_shape[0], image_shape[1], 3),
-        )
-    )
-    model.add(layers.MaxPooling2D(pool_size=(2, 2)))
-    model.add(layers.Conv2D(filters=64, kernel_size=(3, 3), activation="relu"))
-    model.add(layers.MaxPooling2D(pool_size=(2, 2)))
-    model.add(
-        layers.Conv2D(
-            filters=128, kernel_size=(3, 3), activation="relu", padding="same"
-        )
-    )
-    model.add(layers.MaxPooling2D(pool_size=(2, 2)))
-    model.add(
-        layers.Conv2D(
-            filters=128, kernel_size=(3, 3), activation="relu", padding="same"
-        )
-    )
-    model.add(layers.MaxPooling2D(pool_size=(2, 2)))
-    model.add(layers.Flatten())
-    model.add(layers.Dense(units=128, activation="relu"))
-    model.add(layers.Dense(units=1, activation="sigmoid"))
 
-    #model.summary()
+    # NOTE: first version from old files
+    if version==0:
+        model = Sequential()
+        model.add(
+            layers.Conv2D(
+                filters=32,
+                kernel_size=(3, 3),
+                activation="relu",
+                input_shape=(image_shape[0], image_shape[1], 3),
+            )
+        )
+        model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+        model.add(layers.Conv2D(filters=64, kernel_size=(3, 3), activation="relu"))
+        model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+        model.add(
+            layers.Conv2D(
+                filters=128, kernel_size=(3, 3), activation="relu", padding="same"
+            )
+        )
+        model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+        model.add(
+            layers.Conv2D(
+                filters=128, kernel_size=(3, 3), activation="relu", padding="same"
+            )
+        )
+        model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+        model.add(layers.Flatten())
+        model.add(layers.Dense(units=128, activation="relu"))
+        model.add(layers.Dense(units=1, activation="sigmoid"))
+    
+
+
+    elif version==1:
+        input_shape = (image_shape[0], image_shape[1], 3)
+        model.add(Conv2D(32, (3, 3), activation="relu", input_shape=input_shape))
+        model.add(MaxPooling2D((2, 2)))
+        model.add(Dropout(0.25))
+
+        model.add(Conv2D(64, (3, 3), activation="relu"))
+        model.add(MaxPooling2D((2, 2)))
+        #model.add(BatchNormalization())
+        model.add(Dropout(0.25))
+
+        model.add(Flatten())
+        model.add(
+            Dense(32, activation="relu", kernel_regularizer="l2", bias_regularizer="l2")
+        )
+        #model.add(Dropout(0.5))
+        model.add(Dense(1, activation="sigmoid"))
+    else:
+        raise RuntimeError(f"model version {version} not supported.")
+
+    model.summary()
     return model
-
 
 
 @dataclass
@@ -137,6 +160,16 @@ def prepare_model(model, history, params):
     # type: (tf.python.keras.models.Sequential, dict, dict) -> ConvNetState
     train_state = ConvNetState(json.loads(model.to_json()), model.get_weights(), history, params)
     return train_state
+
+
+class MinimumEpochs(tf.keras.callbacks.Callback):
+    def __init__(self, min_epochs : int = 10):
+        super(MinimumEpochs, self).__init__()
+        self.min_epochs = min_epochs
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch < self.min_epochs - 1:
+            self.model.stop_training = False
 
 
 #
@@ -216,7 +249,9 @@ def build_model_from_train_state( train_state ):
         model_params = pickle.load( open(params_path, 'rb' ))
         # build model
         image_shape  = model_params["image_shape"]
-        model        = create_cnn(image_shape)
+
+        model_version = model_params.get("model_version",0)
+        model        = create_cnn(image_shape, version=model_version)
         model.set_weights(weights)
         # load history
         history_path = os.path.join(model_path, 'history.pkl')
@@ -277,21 +312,28 @@ def train_neural_net(df_train, df_valid, params):
         Recall(name="recall"),
     ]
 
-    model = create_cnn(params["image_shape"])
+    model = create_cnn(params["image_shape"], params['model_version'])
     model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=tf_metrics)
 
-    early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=10, restore_best_weights=True
-    )
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=params["patience"],
+            verbose=2,
+            restore_best_weights=True,
+        ),
+        MinimumEpochs(params["min_epochs"]),
+    ]
 
-    history = model.fit(
+    history = model.fit_generator(
         ds_train,
         epochs=params["epochs"],
         validation_data=ds_valid,
-        callbacks=[early_stop],
+        callbacks=callbacks,
         verbose=1,
     )
-    history.history["best_epoch"] = early_stop.best_epoch
+    history.history["best_epoch"] = callbacks[0].best_epoch
+    history.history["stopped_epoch"] = callbacks[0].stopped_epoch
 
     train_state = prepare_model(
         model=model,
@@ -321,21 +363,29 @@ def train_interleaved(df_train_real, df_train_fake, df_valid_real, params):
         Recall(name="recall"),
     ]
 
-    model = create_cnn(params["image_shape"])
+    model = create_cnn(params["image_shape"], params['model_version'])
     model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=tf_metrics)
 
-    early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=10, restore_best_weights=True
-    )
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=params["patience"],
+            verbose=2,
+            restore_best_weights=True,
+        ),
+        MinimumEpochs(params["min_epochs"]),
+    ]
+
 
     history = model.fit(
         ds_train,
         epochs=params["epochs"],
         validation_data=ds_valid,
-        callbacks=[early_stop],
+        callbacks=callbacks,
         verbose=2,
     )
-    history.history["best_epoch"] = early_stop.best_epoch
+    history.history["best_epoch"] = callbacks[0].best_epoch
+    history.history["stopped_epoch"] = callbacks[0].stopped_epoch
 
     train_state = prepare_model(
         model=model,
@@ -367,22 +417,30 @@ def train_altogether(df_train_real, df_train_fake, df_valid_real, weights, param
         Recall(name="recall"),
     ]
 
-    model = create_cnn(params["image_shape"])
+    model = create_cnn(params["image_shape"], params['model_version'])
     model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=tf_metrics)
 
-    early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=10, restore_best_weights=True
-    )
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=params["patience"],
+            verbose=2,
+            restore_best_weights=True,
+        ),
+        MinimumEpochs(params["min_epochs"]),
+    ]
+
 
     history = model.fit(
         ds_train,
         epochs=params["epochs"],
         validation_data=ds_valid,
-        callbacks=[early_stop],
+        callbacks=callbacks,
         verbose=2,
     )
 
-    history.history["best_epoch"] = early_stop.best_epoch
+    history.history["best_epoch"] = callbacks[0].best_epoch
+    history.history["stopped_epoch"] = callbacks[0].stopped_epoch
 
     train_state = prepare_model(
         model=model,
@@ -415,18 +473,26 @@ def train_fine_tuning(df_train, df_valid, params, model):
         layer.trainable = False
     model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=tf_metrics)
 
-    early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=10, restore_best_weights=True
-    )
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=params["patience"],
+            verbose=2,
+            restore_best_weights=True,
+        ),
+        MinimumEpochs(params["min_epochs"]),
+    ]
+
 
     history = model.fit(
         ds_train,
         epochs=params["epochs"],
         validation_data=ds_valid,
-        callbacks=[early_stop],
+        callbacks=callbacks,
         verbose=2,
     )
-    history.history["best_epoch"] = early_stop.best_epoch
+    history.history["best_epoch"] = callbacks[0].best_epoch
+    history.history["stopped_epoch"] = callbacks[0].stopped_epoch
 
     train_state = prepare_model(
         model=model,

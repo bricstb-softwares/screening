@@ -3,11 +3,11 @@ from __future__ import annotations
 __all__ = ["Task"]
 
 import os, hashlib, json, six, luigi
-
+import pandas as pd
 from luigi           import Task as LuigiTask
 from screening       import TARGET_DIR
 from screening.utils import commons
-
+from loguru          import logger
 
 class Task(LuigiTask):
     
@@ -73,6 +73,7 @@ class Task(LuigiTask):
 
     def get_data_samples(self, tasks, seed : int=42):
         data_list = []
+        from screening.tasks.data import CrossValidation
         for task in tasks:
             if type(task) == CrossValidation:
                 data_list.append(pd.read_parquet(task.output().path))
