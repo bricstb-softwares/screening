@@ -123,7 +123,7 @@ def change_flavor(context, flavor):
     
     threshold = context["threshold"][flavor]
     logger.info(f"apply threshold {threshold} for operation {flavor}...")
-    recomendation = "Has tuberculoses" if score>threshold else "Not tuberculoses"
+    recomendation = "Has tuberculosis" if score>threshold else "Not tuberculosis"
     return context, str(score), recomendation, update_log()
 
 #
