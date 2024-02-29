@@ -6,7 +6,7 @@ services:
   cad_server:
     container_name: cad-server
     image: screening/cad-server
-    command: python main.py
+    command: ls -lisah && python main.py
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
