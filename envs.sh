@@ -1,6 +1,6 @@
 
 # docker
-export DOCKER_NAMESPACE=jodafons
+export DOCKER_NAMESPACE=screening
 
 #expose to jupyter
 export DOCKER_EXPOSE=8080

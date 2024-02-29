@@ -1,0 +1,18 @@
+
+version: '3.5'
+
+services:
+  
+  cad_server:
+    container_name: cad-server
+    image: screening/cad-server
+    command: python main.py
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${STORAGE_PATH}:/mnt/brics_data
+      

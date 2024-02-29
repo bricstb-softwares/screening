@@ -1,0 +1,13 @@
+scikit-learn
+pandas
+matplotlib
+pyarrow
+pydicom
+expand-folders
+tqdm
+pandarallel
+gradio
+fastapi
+tensorflow-gpu==2.11.0
+
+
