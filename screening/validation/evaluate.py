@@ -1,17 +1,12 @@
 __all__ = ["evaluate"]
 
-from pprint import pprint
-from itertools import product
-from tqdm import tqdm
 from loguru import logger
 from sklearn.metrics import auc, confusion_matrix, roc_curve
 from sklearn.metrics import mean_squared_error
 
-import collections, os, glob, json, copy, re, pickle
+import collections, pickle
 import numpy as np
 import pandas as pd
-import os
-import tensorflow as tf
 import screening.utils.convnets as convnets
 from screening import DATA_DIR
 
@@ -21,7 +16,7 @@ from screening import DATA_DIR
 
 def evaluate( train_state, train_data, valid_data, test_data ):
 
-    out_of_sample = Inference( 'inference' , ['russia', 'caxias', 'indonesia'] )
+    out_of_sample = Inference( 'inference' , ['russia', 'caxias', 'indonesia','fiocruz'] )
 
     decorators = [
                     # NOTE: set everythong by train dataset (right way)
@@ -131,7 +126,7 @@ class Summary:
         y_true  = df["label"].values.astype(int)
 
         if f'y_prob{label}' not in cache.keys() :
-            y_prob  = model.predict(ds).squeeze() 
+            y_prob  = model.predict_generator(ds).squeeze() 
             cache[f'y_prob{label}'] = y_prob
         else:
             y_prob = cache[f'y_prob{label}']
@@ -264,7 +259,7 @@ class Reference:
         y_true = df["label"].values.astype(int)
 
         if f'y_prob{label}' not in cache.keys() :
-            y_prob  = model.predict(ds).squeeze() 
+            y_prob  = model.predict_generator(ds).squeeze() 
             cache[f'y_prob{label}'] = y_prob
         else:
             y_prob = cache[f'y_prob{label}']
@@ -347,33 +342,45 @@ class Inference:
         'russia'   : {
             'dataset'   : 'Russia',
             'raw'       : str(DATA_DIR)+'/Russia/russia/raw/images.csv',
+            'crop'      : False,
             'blacklist' : str(DATA_DIR)+'/Russia/russia/raw/blacklist.pkl', # NOTE: this is optional configuration
         },
         'china'    : {
             'dataset'   : 'Shenzhen',
+            'crop'      : False,
             'raw'       : str(DATA_DIR)+'/Shenzhen/china/raw/Shenzhen_china_table_from_raw.csv',
         },
         'manaus'   : {
             'dataset'   : 'Manaus',
+            'crop'      : False,
             'raw'       : str(DATA_DIR)+'/Manaus/manaus/raw/Manaus_manaus_table_from_raw.csv',
         },
         'c_manaus' : {
             'dataset'   : 'Manaus',
+            'crop'      : False,
             'raw'       : str(DATA_DIR)+'/Manaus/manaus/raw/Manaus_c_manaus_table_from_raw.csv',
         },
         'imageamento_anonimizado_valid' : {
             'dataset'   : 'SantaCasa',
+            'crop'      : False,
             'raw'       : str(DATA_DIR)+'/SantaCasa/imageamento_anonimizado_valid/raw/SantaCasa_imageamento_anonimizado_valid_table_from_raw.csv',
         },
         'caxias'   : {
             'dataset'   : 'Caxias',
             'raw'       : str(DATA_DIR)+'/Caxias/caxias/raw/images.csv',
+            'crop'      : False,
             'blacklist' : str(DATA_DIR)+'/Caxias/caxias/raw/blacklist.pkl', # NOTE: this is optional configuration
         },
         'indonesia'   : {
             'dataset'   : 'Indonesia',
             'raw'       : str(DATA_DIR)+'/Indonesia/indonesia/raw/images.csv',
+            'crop'      : False,
             'blacklist' : str(DATA_DIR)+'/Indonesia/indonesia/raw/blacklist.pkl', # NOTE: this is optional configuration
+        },
+        'fiocruz'   : {
+            'dataset'   : 'Rio',
+            'raw'       : str(DATA_DIR)+'/Rio/fiocruz/raw/Rio_fiocruz_table_from_raw.csv',
+            'crop'      : True,
         },
     }
 
@@ -418,17 +425,18 @@ class Inference:
         cache       = ctx['cache']
         threshold   = ctx['threshold']
 
-        model, history, params = convnets.build_model_from_train_state(train_state)
+        model, _, params = convnets.build_model_from_train_state(train_state)
 
         d  = collections.OrderedDict()
         
         for tag in self.data_tags:
             logger.info(f"Calculating inference for {tag} dataset...")
             data    = self.prepare_data(tag)
-            ds      = convnets.build_dataset(data, params["image_shape"], batch_size=self.batch_size)       
+            crop    = self.__metadata[tag]['crop']
+            ds      = convnets.build_dataset(data, params["image_shape"], batch_size=self.batch_size, crop_header=crop)       
             metrics = self.calculate( ds, data, model, threshold, cache, label=tag )              
             d[tag]  = metrics
-            logger.info(tag)
+            logger.info(tag + f" (Cropped? {'Yes' if crop else 'No'})")
             logger.info( "      SP = %1.2f (Sens = %1.2f, Spec = %1.2f)" % (metrics['sp_index']*100, metrics['sensitivity']*100, metrics['specificity']*100     )    )
             logger.info(f"      tp = {metrics['true_positive']}, tn = {metrics['true_negative']}, fp = {metrics['false_positive']}, fn = {metrics['false_negative']}")
 
@@ -444,7 +452,7 @@ class Inference:
 
         # cache answer
         if f'y_prob_inference_{label}' not in cache.keys() :
-            y_prob  = model.predict(ds).squeeze() 
+            y_prob  = model.predict_generator(ds).squeeze() 
             cache[f'y_prob_inference_{label}'] = y_prob
         else:
             y_prob = cache[f'y_prob_inference_{label}']

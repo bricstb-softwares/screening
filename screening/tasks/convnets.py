@@ -140,7 +140,7 @@ class TrainBaseline(TrainCNN):
         valid_real  = split_dataframe(data, test, sort, "valid_real")
         test_real   = split_dataframe(data, test, sort, "test_real" )
 
-        train_state = train_neural_net(train_real, valid_real, task_params)
+        train_state = train_neural_net(train_real, valid_real, task_params, basepath=self.get_output_path())
         train_state = evaluate( train_state, train_real, valid_real, test_real)
 
         end = default_timer()
@@ -158,7 +158,7 @@ class TrainSynthetic(TrainCNN):
         valid_real  = split_dataframe(data, test, sort, "valid_real")
         test_real   = split_dataframe(data, test, sort, "test_real" )
 
-        train_state = train_neural_net(train_fake, valid_real, task_params)
+        train_state = train_neural_net(train_fake, valid_real, task_params, basepath=self.get_output_path())
         train_state = evaluate( train_state, train_fake, valid_real, test_real)
 
         end = default_timer()
@@ -177,7 +177,7 @@ class TrainInterleaved(TrainCNN):
         valid_real = split_dataframe(data, test, sort, "valid_real")
         test_real  = split_dataframe(data, test, sort, "test_real" )
         train_state = train_interleaved(
-            train_real, train_fake, valid_real, task_params
+            train_real, train_fake, valid_real, task_params, basepath=self.get_output_path()
         )
         train_real_fake = pd.concat([train_real, train_fake])
         train_state = evaluate( train_state, train_real_fake, valid_real, test_real)
@@ -203,7 +203,7 @@ class TrainAltogether(TrainCNN):
         weights = np.concatenate((real_weights, fake_weights))
         weights = weights / sum(weights)
         train_state = train_altogether(
-            train_real, train_fake, valid_real, weights, task_params
+            train_real, train_fake, valid_real, weights, task_params, basepath=self.get_output_path()
         )
         train_real_fake = pd.concat([train_real, train_fake])
         train_state = evaluate( train_state, train_real_fake, valid_real, test_real)
@@ -226,7 +226,7 @@ class TrainBaselineFineTuning(TrainCNN):
             model, _, _     = build_model_from_job( model_path+'/output.pkl' )
         else:
             tasks           = self.requires()
-            experiement_path= Path(tasks[0].get_output_path())
+            experiment_path = Path(tasks[0].get_output_path())
             model_path      = experiment_path / f"cnn_fold{test}/sort{sort}/"
             model, _, _     = build_model_from_train_state( model_path )
         return model
@@ -270,7 +270,7 @@ class TrainBaselineFineTuning(TrainCNN):
         model      = self.get_parent_model(test, sort)
 
         train_state = train_fine_tuning(
-            train_fake, valid_real, test_real, task_params, model
+            train_fake, valid_real, test_real, task_params, model, basepath=self.get_output_path()
         )
         train_state = evaluate( train_state, train_fake, valid_real, test_real)
 
@@ -292,7 +292,7 @@ class TrainFineTuning(TrainCNN):
             model, _, _     = build_model_from_job( model_path+'/output.pkl' )
         else:
             tasks           = self.requires()
-            experiement_path= Path(tasks[0].get_output_path())
+            experiment_path = Path(tasks[0].get_output_path())
             model_path      = experiment_path / f"cnn_fold{test}/sort{sort}/"
             model, _, _     = build_model_from_train_state( model_path )
 
@@ -325,7 +325,7 @@ class TrainFineTuning(TrainCNN):
         model      = self.get_parent_model(test, sort)
                     
         train_state = train_fine_tuning(
-                    train_real, valid_real, task_params, model
+                    train_real, valid_real, task_params, model, basepath=self.get_output_path()
                 )
         train_state = evaluate( train_state, train_real, valid_real, test_real)
 

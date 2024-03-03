@@ -5,7 +5,7 @@ from loguru import logger
 
 
 def get_task( name, process_name ):
-    if name=='convnet':
+    if name=='convnets':
         logger.info(f"getting convnets tasks with process {process_name}")
         from screening.pipelines.convnets import processes
         return processes[process_name]
