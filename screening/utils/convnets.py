@@ -2,7 +2,7 @@ __all__ = []
 
 
 
-import os, pickle, json, sys
+import os, pickle, json
 import tarfile
 import typing as T
 import numpy as np
@@ -37,10 +37,11 @@ def build_dataset(df,
     def _decode_image(path, label, image_shape, channels : int=3, crop_header :bool=False):
         image_encoded = tf.io.read_file(path)
         image = tf.io.decode_jpeg(image_encoded, channels=channels)
-        #image = tf.image.rgb_to_grayscale(image)
+        # image = tf.image.rgb_to_grayscale(image)
         image = tf.cast(image, dtype=tf.float32) / tf.constant(255., dtype=tf.float32)
         if crop_header:
-            image =  image.crop((0,0,image.size[0],image.size[1]-70))
+            shape = tf.shape(image) 
+            image = tf.image.crop_to_bounding_box(image, 0,0,shape[0]-70,shape[1])
         image = tf.image.resize(image, image_shape, method='nearest')
         label = tf.cast(label, tf.int32)
         return image, label
@@ -331,7 +332,7 @@ def train_neural_net(df_train, df_valid, params, basepath : str=os.getcwd()):
   
     history = model.fit_generator(
         ds_train,
-        epochs=2,#params["epochs"],
+        epochs=params["epochs"],
         initial_epoch=model_checkpoint.initial_epoch,
         validation_data=ds_valid,
         callbacks=[
@@ -343,7 +344,6 @@ def train_neural_net(df_train, df_valid, params, basepath : str=os.getcwd()):
 
     history["best_epoch"]    = model_checkpoint.best_epoch
 
-    pprint(history)
     train_state = prepare_model(
         model=model,
         history=history,

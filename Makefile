@@ -28,3 +28,19 @@ clean:
 	docker system prune -a
 
 	
+
+run_maestro:
+
+	source ${MAESTRO_VIRTUALENV_PATH}/bin/activate
+	maestro slurm cancel
+	rm *.out && rm *.log
+	maestro run slurm --device auto\
+                      --message-level INFO\
+                      --max-procs 4\
+                      --slurm-partition gpu-large\
+                      --slurm-reservation ${SLURM_RESERVATION}\
+                      --slurm-account ${USER}\
+                      --slurm-virtualenv ${MAESTRO_VIRTUALENV_PATH}\
+                      --database-recreate \
+                      --database-url ${POSTGRES_SERVER_URL} \
+                      --slurm-nodes 7\

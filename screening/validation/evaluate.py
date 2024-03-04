@@ -16,7 +16,8 @@ from screening import DATA_DIR
 
 def evaluate( train_state, train_data, valid_data, test_data ):
 
-    out_of_sample = Inference( 'inference' , ['russia', 'caxias', 'indonesia','fiocruz'] )
+    #out_of_sample = Inference( 'inference' , ['russia', 'caxias', 'indonesia','fiocruz'] )
+    out_of_sample = Inference( 'inference' , ['russia','fiocruz'] )
 
     decorators = [
                     # NOTE: set everythong by train dataset (right way)

@@ -36,6 +36,12 @@ export LOGURO_LEVEL="INFO"
 # dorothy token
 export DOROTHY_TOKEN="b16fe0fc92088c4840a98160f3848839e68b1148"
 
+#
+# maestro
+#
+export MAESTRO_VIRTUALENV_PATH=/home/joao.pinto/git_repos/maestro/maestro-env
+export SLURM_RESERVATION=joao.pinto_7
+
 
 # export to singularity
 export SINGULARITYENV_DOCKER_NAMESPACE=${DOCKER_NAMESPACE}
