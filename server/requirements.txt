@@ -10,7 +10,9 @@ gradio==4.16.0
 fastapi==0.103.2 
 tensorflow-gpu==2.11.0
 typing_extensions==4.7.1
+keras-vis
 loguru
 luigi
+gradio
 
 

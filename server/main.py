@@ -2,8 +2,7 @@
 
 
 import gradio as gr
-import io
-import sys, os, pickle, json
+import sys, socket, pickle, json
 import tensorflow as tf
 import numpy as np
 import collections
@@ -12,29 +11,75 @@ from loguru  import logger
 from config import server_flags as flags
 from config import update_log
 from fastapi import FastAPI
+from tf_keras_vis.utils.scores import CategoricalScore
+from tf_keras_vis.saliency import Saliency
+from tf_keras_vis.utils import normalize
+from vis.utils import utils
 
-logger.add(flags.log_path,  rotation="50 MB", backtrace=True, diagnose=True)
 
+
+def setup_logs(  level : str='INFO'):
+    """Setup and configure the logger"""
+    server_name = socket.gethostname()
+    logger.configure(extra={"server_name" : server_name})
+    logger.remove()  # Remove any old handler
+    format="<green>{time}</green> | <level>{level:^12}</level> | <cyan>{extra[server_name]:<30}</cyan> | <blue>{message}</blue>"
+    logger.add(
+        sys.stdout,
+        colorize=True,
+        backtrace=True,
+        diagnose=True,
+        level=level,
+        format=format,
+    )
+    output_file = 'output.log'
+    logger.add(output_file, 
+               rotation="50 MB", 
+               format=format, 
+               level=level, 
+               colorize=False)
+
+setup_logs()
 
 
 #
 # NOTE: configure the GPU card
 #
-model_from_json = tf.keras.models.model_from_json
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices)>0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 tf.config.run_functions_eagerly(False)
 
 
+
+def get_saliency( model, image ):
+    img=image
+    if len(img.shape) == 3:
+        img = img[np.newaxis]
+    layer_idx = utils.find_layer_idx(model, model.layers[-1].name)
+    model.layers[layer_idx].activation = tf.keras.activations.linear
+    model = utils.apply_modifications(model)
+    score = CategoricalScore([0])
+    saliency = Saliency(model, clone=False)
+    saliency_map = saliency(score, image, smooth_samples=20, smooth_noise=0.2)
+    saliency_map = normalize(saliency_map)
+    return saliency_map[0]
+
+
 def load_model( path ):
-    def preproc_for_convnets( path ,channels=3, image_shape=(256,256)):
+
+    def preproc_for_convnets( path ,channels=3, image_shape=(256,256), crop : bool=False):
         image_encoded = tf.io.read_file(path)
         image = tf.io.decode_jpeg(image_encoded, channels=channels)
-        image = tf.image.convert_image_dtype(image, tf.float32)
-        image = tf.image.resize(image, image_shape)
-        image = np.expand_dims(image, axis=0)
-        return image
+        # image = tf.image.rgb_to_grayscale(image)
+        image = tf.cast(image, dtype=tf.float32) / tf.constant(255., dtype=tf.float32)
+        if crop:
+            shape = tf.shape(image) 
+            image = tf.image.crop_to_bounding_box(image, 0,0,shape[0]-70,shape[1])
+        image = tf.image.resize(image, image_shape, method='nearest')
+        return image.numpy()
+    
+
     preproc = {
         'convnet': preproc_for_convnets
     }
@@ -54,9 +99,9 @@ def load_model( path ):
                 metadata = d['metadata']
                 model = d["model"]
                 logger.info("creating model...")
-                model = model_from_json( json.dumps( d['model']['sequence'], separators=(',',':')) )
+                model = tf.keras.models.model_from_json( json.dumps( d['model']['sequence'], separators=(',',':')) )
                 model.set_weights( d['model']['weights'] )
-                model.summary()
+                #model.summary()
                 sort = metadata['sort']; test = metadata['test']
                 logger.info(f"sort = {sort} and test = {test}")
 
@@ -93,25 +138,34 @@ default_flavor = flavors[0]
     
 
 
+#
+# events 
+#
 
-def predict( context, flavor, image):
+
+
+def predict( context, flavor):
+
+
     logger.info("predicting....")
+    
     model     = context["model"]
-    preproc   = context["preproc"]
     threshold = context["threshold"][flavor]
+    image     = context['image']
 
-    if not image:
-        logger.info("Not possible to predict. First, upload a new image and repeat the operation...")
-        return context, "","",update_log()
     logger.info(f"operation point is {flavor}")
-
-    # NOTE: predict
-    score = model.predict( preproc(image) )[0][0] # NOTE: get single value since this is a one sample mode
-    logger.info(f"image {image} output prob as {score}")
+    ## NOTE: predict
+    img = np.expand_dims(image, 0)
+    score = model.predict( img )[0][0] # NOTE: get single value since this is a one sample mode
+    logger.info(f"output prob as {score}")
     context["score"] = score
-    recomendation = "Has tuberculoses" if score>threshold else "Not tuberculoses"
+    recomendation = "Not normal" if score>threshold else "Normal"
     logger.info(f"model recomentation is : {recomendation}")
-    return context, str(score), recomendation, update_log()
+
+
+    image = get_saliency(model, image, )
+
+    return context, str(score), recomendation, image, update_log()
 
 
 def change_flavor(context, flavor):
@@ -123,31 +177,61 @@ def change_flavor(context, flavor):
     
     threshold = context["threshold"][flavor]
     logger.info(f"apply threshold {threshold} for operation {flavor}...")
-    recomendation = "Has tuberculosis" if score>threshold else "Not tuberculosis"
+    recomendation = "Not normal" if score>threshold else "Normal"
     return context, str(score), recomendation, update_log()
+
+
+
+def apply_preproc_image( context , image_path , auto_crop):
+
+    logger.info("applying preprocessing...")
+    image=preproc(image_path, crop=auto_crop)
+    context["image"]=image
+    return context, image, update_log()
+
+
+
 
 #
 # NOTE: Build labelling tab here with all trigger functions inside
 #
 def inference_tab(context ,  name = 'Inference'):
+
+
     with gr.Tab(name):
         with gr.Row():
             with gr.Column():
-                image       = gr.Image(label='', type='filepath')
-                predict_btn = gr.Button("Predict")
+                with gr.Group():
+                    image       = gr.Image(label='', 
+                                                 type='filepath' , 
+                                                 #show_download_button=True,
+                                                 #interactive=True,
+                                                 #height=600, width=600
+                                                 )
+                    auto_crop   = gr.Checkbox(label="auto cropping", info="Auto cropping for digital images", value=True)
+
             with gr.Column():
+
                 with gr.Group():
                     flavor       = gr.Dropdown( flavors, value=default_flavor, label="Select the model operation:" )
                     with gr.Row():
                         score         = gr.Textbox(label="Model score:")
                         recomendation = gr.Textbox(label="Model recomendation:")
+                    predict_btn = gr.Button("Predict")
+
+                with gr.Accordion(open=False, label='Detailed information'):
+                    with gr.Row():
+                        image_processed = gr.Image(label='processed image', type='numpy', height=256, width=256)
+                        image_saliency  = gr.Image(label='saliency image', type='numpy', height=256, width=256)
 
         with gr.Group():
             log = gr.Textbox(update_log(),label='data logger', max_lines=10)
-            tag = gr.Textbox(model_tag, label='Model version:')
+            #tag = gr.Textbox(model_tag, label='Model version:')
 
         # events
-        predict_btn.click( predict , [context, flavor, image], [context, score, recomendation, log])
+
+        image.change( apply_preproc_image , [context, image, auto_crop], [context , image_processed, log])
+        predict_btn.click( predict , [context, flavor], [context, score, recomendation, image_saliency, log]) 
         flavor.change( change_flavor, [context, flavor], [context, score, recomendation, log])
 
 
@@ -169,9 +253,9 @@ def get_context():
 
 with gr.Blocks(theme="freddyaboulton/test-blue") as demo:
     context  = gr.State(get_context())
-    gr.Label(f"CAD System (Amostra Gratis)", show_label=False)
+    gr.Label(f"CAD", show_label=False)
     inference_tab(context, name='Inference')
-    gr.Label("An initiative of the BRICS/UFRJ groups." , show_label=False)
+    gr.Label("An initiative of the BRICS/UFRJ group." , show_label=False)
 
 
 # create APP
@@ -181,7 +265,7 @@ app = gr.mount_gradio_app(app, demo, path="/inference")
 
 
 if __name__ == "__main__":
-    logger.info("Starting server...")
-    demo.launch(share=True,
-                server_name="0.0.0.0", server_port=9000)
-   
+    import uvicorn
+    #logger.info("Starting server...")
+    uvicorn.run(app, host='0.0.0.0', port=9000, reload=False, log_level="warning")
+

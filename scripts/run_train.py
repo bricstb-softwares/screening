@@ -60,13 +60,14 @@ def run():
         else:
             logger.warning("only CPU available.")
 
+
         with open(args.dataset_info, "rt") as file:
             d_args = argparse.Namespace()
             d_args.__dict__.update(json.load(file))
-
         with open(args.hyperparameters, "rt") as file:
             h_args = argparse.Namespace()
             h_args.__dict__.update(json.load(file))
+
 
         task_params = vars(h_args)
         task_params["dataset_info"] = vars(d_args)
@@ -78,15 +79,13 @@ def run():
         else:
             task_params["job"] = {}
 
-   
-
         model_name = task_params.pop("model_name")
         task       = get_task(model_name, args.process_name )
 
         if dry_run:
             if "epochs" in task_params.keys():
                 logger.info("setting epochs to 5 since this is a dry_run job.")
-                task_params["epochs"]=5
+                task_params["epochs"]=1
 
             if os.path.exists(job_output):
                 logger.info(f"removing {job_output} since this is a dry_run job.")
