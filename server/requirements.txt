@@ -13,6 +13,5 @@ typing_extensions==4.7.1
 keras-vis
 loguru
 luigi
-gradio
 tf_keras_vis
 keras-vis
