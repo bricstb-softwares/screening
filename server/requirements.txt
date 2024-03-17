@@ -14,5 +14,5 @@ keras-vis
 loguru
 luigi
 gradio
-
-
+tf_keras_vis
+keras-vis
