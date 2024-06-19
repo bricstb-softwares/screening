@@ -74,7 +74,7 @@ def load_model( path ):
     
 
     preproc = {
-        'convnet': preproc_for_convnets
+        'convnets': preproc_for_convnets
     }
 
     logger.info(f"reading file from {path}...")
@@ -84,8 +84,9 @@ def load_model( path ):
 
         name = d["__name__"]
         version = d["__version__"]
+        logger.info(f"name : {name}")
 
-        if name == "convnet":
+        if name == "convnets":
             logger.info(f"strategy is {name}...")
             # NOTE: This is the current version of the convnets strategy
             if version == 1:

@@ -13,6 +13,50 @@ from fastapi import FastAPI
 import utils
 
 
+intro = """
+
+## OpenTB
+
+A tuberculose (TB) continua a ser uma das principais causas de mortalidade em países subdesenvolvidos, 
+onde a infraestrutura de saúde frequentemente carece de recursos e tecnologias avançadas para diagnóstico 
+precoce e tratamento eficaz. No Brasil, a situação é particularmente grave, com altas taxas de incidência 
+e mortalidade, especialmente em áreas urbanas densamente povoadas como a cidade do Rio de Janeiro.
+A complexidade do diagnóstico da tuberculose, que pode ser facilmente confundida com outras doenças 
+pulmonares, agrava a situação, resultando em atrasos no tratamento e aumento da transmissão da doença.
+
+Para enfrentar esse desafio, o Sistema OpenTB foi desenvolvido como um sistema de Detecção Assistida 
+por Computador (CAD) para infecções por tuberculose. Este sistema utiliza inteligência artificial para 
+aprimorar a precisão e a rapidez do diagnóstico, auxiliando os profissionais de saúde na identificação 
+de casos de TB, especialmente em estágios iniciais.
+
+O OpenTB baseia-se em dois modelos principais de inteligência artificial: redes neurais 
+convolucionais (CNNs) e Redes Adversariais Generativas (WGANs). As CNNs são um tipo de rede neural 
+profunda que são particularmente eficazes para tarefas de visão computacional. Elas funcionam aplicando 
+filtros convolucionais sobre as imagens para detectar padrões e características específicas, como lesões
+ pulmonares típicas da tuberculose em radiografias de tórax. A capacidade das CNNs de aprender a partir 
+ de grandes conjuntos de dados de imagens permite que o sistema OpenTB identifique anomalias com alta 
+ precisão, mesmo em casos sutis que podem ser difíceis de detectar para o olho humano.
+
+As Redes Adversariais Generativas (WGANs) são outra classe de modelos utilizados no OpenTB, focando em 
+gerar imagens sintéticas realistas que podem ser usadas para melhorar o treinamento dos modelos de CNN. 
+As WGANs consistem em duas redes neurais que competem entre si: uma rede geradora que cria imagens falsas 
+e uma rede discriminadora que tenta distinguir entre imagens reais e geradas. Esse processo adversarial 
+resulta em um aprimoramento contínuo da qualidade das imagens geradas, fornecendo dados adicionais valiosos 
+para treinar as CNNs e, assim, aumentar a precisão do diagnóstico do sistema.
+
+O OpenTB é servido no Laboratório de Processamento de Sinais (LPS) da Universidade Federal do Rio de 
+Janeiro (UFRJ), localizado na Ilha do Fundão. Este laboratório está equipado com infraestrutura de 
+ponta para pesquisa e desenvolvimento em processamento de sinais e inteligência artificial. 
+Através do LPS, o sistema OpenTB pode ser acessado remotamente por profissionais de saúde de qualquer 
+parte do Rio de Janeiro e do Brasil, permitindo um diagnóstico rápido e eficiente, independentemente 
+da localização geográfica.
+
+Em resumo, o Sistema OpenTB representa uma avançada ferramenta tecnológica que pode revolucionar o 
+combate à tuberculose em áreas subdesenvolvidas, fornecendo um diagnóstico preciso e acessível que 
+é crucial para o controle e erradicação da doença.
+"""
+
+
 
 #
 # NOTE: configure the GPU card
@@ -24,11 +68,12 @@ tf.config.run_functions_eagerly(False)
 
 
 
+default_model_path="/mnt/brics_data/models/v1/user.philipp.gaspar.convnets_v1.baseline.shenzhen_santacasa.exp.20240303.r1/job.test_0.sort_0/output.pkl"
 
 #
 # This should be global to all sessions
 #
-model, preproc, threshold, model_tag = utils.load_model( flags.model )
+model, preproc, threshold, model_tag = utils.load_model( default_model_path )
 flavors        = list(threshold.keys())
 default_flavor = flavors[0]
     
@@ -178,14 +223,14 @@ def get_context():
 
 with gr.Blocks(theme="freddyaboulton/test-blue") as demo:
     context  = gr.State(get_context())
-    gr.Label(f"CAD UFRJ", show_label=False)
+    gr.Label(f"OpenTB - LPS/UFRJ", show_label=False)
     inference_tab(context, name='Inference')
-    gr.Label("An initiative of the BRICS/UFRJ group." , show_label=False)
+    gr.Markdown(intro , show_label=False)
 
 
 # create APP
 app = FastAPI()
-app = gr.mount_gradio_app(app, demo, path="/inference")
+app = gr.mount_gradio_app(app, demo, path="/")
 
 
 
